@@ -189,6 +189,7 @@ def _cmd_render(
     """Render pages from a PDF back to a new PDF via the extraction pipeline."""
     import fitz
 
+    from src.output_dir import OutputDir
     from src.rendering import render_pages_to_pdf
 
     doc = fitz.open(str(pdf_path))
@@ -200,7 +201,10 @@ def _cmd_render(
     if output:
         output_path = Path(output)
     else:
-        output_path = Path("output") / f"{pdf_path.stem}_regenerated.pdf"
+        out = OutputDir(document_name=pdf_path.stem)
+        output_path = out.reconstructed_pdf_path
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Source: {pdf_path} ({total_pages} pages)")
     print(f"Rendering pages: {page_numbers}")
@@ -209,7 +213,8 @@ def _cmd_render(
     print(f"Output: {result} ({len(page_numbers)} pages)")
 
     if report:
-        _cmd_report(pdf_path, output_path, None)
+        report_path = output_path.parent / "report.md"
+        _cmd_report(pdf_path, output_path, str(report_path))
 
 
 def _cmd_report(pdf_path: Path, regen_path: Path, output: str | None) -> None:
@@ -238,11 +243,12 @@ def _cmd_report(pdf_path: Path, regen_path: Path, output: str | None) -> None:
 def _cmd_ocr_ingest(args) -> None:
     """Run OCR pipeline on a scanned/flattened PDF."""
     from src.ocr import ocr_ingest
+    from src.ocr.ocr_renderer import render_ocr_searchable
+    from src.output_dir import OutputDir
     from src.serialization import to_yaml
 
     pdf_path = Path(args.pdf_path)
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    out = OutputDir(base_dir=args.output_dir, document_name=pdf_path.stem)
 
     print(f"OCR Ingestion: {pdf_path}")
     print(f"  Region: {args.region}")
@@ -259,18 +265,16 @@ def _cmd_ocr_ingest(args) -> None:
         use_bedrock_disambiguate=not args.no_disambiguate,
     )
 
-    # Save Document IR
-    ir_path = output_dir / f"{pdf_path.stem}_ocr_document_ir.yaml"
-    to_yaml(document_ir, ir_path)
-    print(f"Document IR: {ir_path}")
+    # Save intermediate artifacts
+    to_yaml(document_ir, out.ir_path)
+    print(f"Document IR: {out.ir_path}")
     print(f"  Pages: {document_ir.page_count}")
     total_blocks = sum(len(p.text_blocks) for p in document_ir.pages)
     print(f"  Text blocks: {total_blocks}")
 
     # Save review flags
     if review_flags:
-        flags_path = output_dir / f"{pdf_path.stem}_review_flags.md"
-        with open(flags_path, "w") as f:
+        with open(out.review_flags_path, "w") as f:
             f.write(f"# Human Review Flags: {pdf_path.name}\n\n")
             f.write(f"Total flags: {len(review_flags)}\n\n")
             f.write("| Page | Reason | Candidates | Confidence |\n")
@@ -281,20 +285,23 @@ def _cmd_ocr_ingest(args) -> None:
                     f"| {flag.page} | {flag.reason} | {cands} | "
                     f"{flag.confidence:.0f}% |\n"
                 )
-        print(f"  Review flags: {len(review_flags)} -> {flags_path}")
+        print(f"  Review flags: {len(review_flags)} -> {out.review_flags_path}")
     else:
         print("  Review flags: 0 (all high confidence)")
+
+    # Save cost report
+    with open(out.ocr_cost_path, "w") as f:
+        f.write(f"# OCR Cost Report: {pdf_path.name}\n\n")
+        f.write(cost_tracker.summary())
+
+    # Generate final searchable PDF
+    render_ocr_searchable(pdf_path, document_ir, out.reconstructed_pdf_path)
+    print(f"\nFinal PDF: {out.reconstructed_pdf_path}")
 
     # Cost summary
     print()
     print(cost_tracker.summary())
-
-    # Save cost report
-    cost_path = output_dir / f"{pdf_path.stem}_ocr_cost.md"
-    with open(cost_path, "w") as f:
-        f.write(f"# OCR Cost Report: {pdf_path.name}\n\n")
-        f.write(cost_tracker.summary())
-    print(f"\nCost report: {cost_path}")
+    print(f"\n{out.summary()}")
 
 
 if __name__ == "__main__":

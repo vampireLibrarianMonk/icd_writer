@@ -344,6 +344,34 @@ def create_app() -> FastAPI:
             doc.close()
             raise HTTPException(400, f"Invalid page: {page_number}")
 
+    @app.get("/document/requirements")
+    def get_requirements():
+        """Extract and return all candidate requirements from the document."""
+        doc_ir = state["document_ir"]
+        if not doc_ir:
+            raise HTTPException(404, "No document loaded")
+
+        from src.requirements import extract_requirements
+
+        reqs = extract_requirements(doc_ir)
+        return {
+            "count": len(reqs),
+            "requirements": [
+                {
+                    "text": r.text[:200],
+                    "page": r.page,
+                    "block_id": r.block_id,
+                    "normative_term": r.normative_term,
+                    "section": r.section,
+                    "requirement_id": r.requirement_id,
+                    "confidence": r.confidence,
+                    "has_tbd": r.has_tbd,
+                }
+                for r in reqs
+            ],
+        }
+
+
         page = doc[page_number - 1]
         pix = page.get_pixmap(dpi=150)
         img_bytes = pix.tobytes("png")
@@ -441,19 +469,29 @@ def create_app() -> FastAPI:
 
     @app.post("/document/export")
     def export_pdf():
-        """Export the current document state as a PDF."""
+        """Export the current document state as a PDF (with edits applied)."""
         doc_ir = state["document_ir"]
         session = state["session"]
         if not doc_ir:
             raise HTTPException(404, "No document loaded")
 
         from src.output_dir import OutputDir
+        from src.rendering.ir_renderer import render_ir_to_pdf
 
-        out = OutputDir(document_name=Path(session.document_path).stem if session else "export")
-        # TODO: implement export from IR
-        # For now, return the output path
-        session.record(ActionType.DOCUMENT_EXPORTED, data={"path": str(out.reconstructed_pdf_path)})
-        return {"status": "exported", "path": str(out.reconstructed_pdf_path)}
+        out = OutputDir(
+            document_name=Path(session.document_path).stem if session else "export"
+        )
+
+        result = render_ir_to_pdf(
+            doc_ir, session.document_path, out.reconstructed_pdf_path
+        )
+
+        if session:
+            session.record(
+                ActionType.DOCUMENT_EXPORTED, data={"path": str(result)}
+            )
+
+        return {"status": "exported", "path": str(result)}
 
     # ─── Configuration ─────────────────────────────────────────────
 

@@ -164,16 +164,17 @@ def render_ocr_searchable(
                 continue
 
             # Calculate font size to match OCR bbox width
+            # For invisible text, width matching is all that matters —
+            # height overflow is acceptable since the text isn't rendered visually
             width_at_1pt = font.text_length(text, fontsize=1)
             if width_at_1pt <= 0:
                 continue
-            size_for_width = target_width / width_at_1pt
+            calc_size = target_width / width_at_1pt
 
-            # Constrain by height
-            size_for_height = target_height / TOTAL_HEIGHT_RATIO
-            calc_size = min(size_for_width, size_for_height)
-
-            # Baseline: place top of text at bbox.y0
+            # Baseline: place so the text bbox top aligns with OCR bbox top
+            # PyMuPDF bbox.y0 = baseline - ascender*fontsize
+            # We want bbox.y0 = ocr_bbox.y0
+            # So: baseline = ocr_bbox.y0 + ascender*fontsize
             baseline_y = block.bbox.y0 + (ASCENDER * calc_size)
 
             page.insert_text(

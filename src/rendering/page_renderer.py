@@ -268,27 +268,31 @@ def extract_page_elements(pdf_path: Path | str, page_number: int) -> tuple[float
                                 else:
                                     break
 
-                            # If image has borders, crop them and adjust bbox
+                            # If image has borders, crop them and adjust bbox.
+                            # Only crop if the INTERIOR is light (white/gray fill
+                            # with dark border). If interior is also dark, this is
+                            # a filled dark element (e.g., background for white text)
+                            # and should not be cropped.
                             if left_b > 2 or right_b > 2 or top_b > 2 or bot_b > 2:
-                                # Calculate the pt-per-pixel scale
-                                px_to_pt_x = bbox.width / w
-                                px_to_pt_y = bbox.height / h
-
-                                # Crop the image
+                                # Check interior brightness
                                 cropped = arr[top_b:h - bot_b, left_b:w - right_b]
                                 if cropped.shape[0] > 2 and cropped.shape[1] > 2:
-                                    # Adjust bbox to match cropped area
-                                    bbox = BoundingBox(
-                                        x0=bbox.x0 + left_b * px_to_pt_x,
-                                        y0=bbox.y0 + top_b * px_to_pt_y,
-                                        x1=bbox.x1 - right_b * px_to_pt_x,
-                                        y1=bbox.y1 - bot_b * px_to_pt_y,
-                                    )
-                                    # Re-encode cropped image
-                                    cropped_pil = PILImage.fromarray(cropped)
-                                    buf = io.BytesIO()
-                                    cropped_pil.save(buf, format="PNG")
-                                    img["image"] = buf.getvalue()
+                                    interior_mean = cropped[:, :, :3].mean()
+                                    if interior_mean > 128:
+                                        # Light interior — safe to crop borders
+                                        px_to_pt_x = bbox.width / w
+                                        px_to_pt_y = bbox.height / h
+                                        bbox = BoundingBox(
+                                            x0=bbox.x0 + left_b * px_to_pt_x,
+                                            y0=bbox.y0 + top_b * px_to_pt_y,
+                                            x1=bbox.x1 - right_b * px_to_pt_x,
+                                            y1=bbox.y1 - bot_b * px_to_pt_y,
+                                        )
+                                        # Re-encode cropped image
+                                        cropped_pil = PILImage.fromarray(cropped)
+                                        buf = io.BytesIO()
+                                        cropped_pil.save(buf, format="PNG")
+                                        img["image"] = buf.getvalue()
                     except Exception:
                         pass
 
@@ -511,7 +515,7 @@ def render_page_to_html(
             html_parts.append(f'<div style="{style}"></div>')
         elif isinstance(elem, PathElement):
             # Render complex paths using inline SVG
-            render_stroke = _scale_stroke_width(elem.stroke_width)
+            render_stroke = _scale_stroke_width(elem.stroke_width or 1.0)
             fill_attr = f'fill="{elem.fill_color}"' if elem.fill_color else 'fill="none"'
             stroke_attr = f'stroke="{elem.stroke_color}" stroke-width="{render_stroke}"' if elem.stroke_color else 'stroke="none"'
             html_parts.append(

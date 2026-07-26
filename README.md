@@ -100,10 +100,9 @@ tests/
 
 ## Strategy
 
-See `icd_strategy_v2.txt` for the full project strategy document covering:
+See `STRATEGY.md` for the full project strategy document covering:
+- Proven techniques and their empirical calibration
+- Visual fidelity results across all 35 pages
 - Two-layer IR (Document IR + Semantic ICD IR)
-- Provenance tracking
-- Rendering requirements
-- OpenSearch integration plan
-- AWS architecture
-- Delivery phases
+- What was and wasn't needed from the original plan
+- Delivery phases and next steps

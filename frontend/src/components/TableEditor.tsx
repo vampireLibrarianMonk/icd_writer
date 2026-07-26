@@ -68,6 +68,14 @@ export function TableEditor() {
           { method: "PUT" }
         );
       }
+
+      // Update store state (edit count, undo availability)
+      const actions = await fetch("http://localhost:8000/session/actions").then((r) => r.json());
+      useEditorStore.setState((state) => ({
+        editCount: state.editCount + 1,
+        canUndo: actions.undo_available,
+        canRedo: actions.redo_available,
+      }));
     }
     setEditingCell(null);
   };

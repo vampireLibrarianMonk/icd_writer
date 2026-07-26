@@ -44,6 +44,22 @@ def main() -> None:
         default=None,
         help="Output PDF path (default: output/<stem>_regenerated.pdf)",
     )
+    render_parser.add_argument(
+        "--report",
+        action="store_true",
+        help="Generate a fidelity report after rendering",
+    )
+
+    # Report command
+    report_parser = subparsers.add_parser("report", help="Generate fidelity report for a rendered PDF")
+    report_parser.add_argument("pdf_path", type=str, help="Path to the original PDF")
+    report_parser.add_argument("regen_path", type=str, help="Path to the regenerated PDF")
+    report_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output report path (default: output/<stem>_report.md)",
+    )
 
     # Info command
     info_parser = subparsers.add_parser("info", help="Show PDF metadata without full extraction")
@@ -60,7 +76,9 @@ def main() -> None:
     elif args.command == "ingest":
         _cmd_ingest(Path(args.pdf_path), Path(args.output_dir), args.format)
     elif args.command == "render":
-        _cmd_render(Path(args.pdf_path), args.pages, args.output)
+        _cmd_render(Path(args.pdf_path), args.pages, args.output, args.report)
+    elif args.command == "report":
+        _cmd_report(Path(args.pdf_path), Path(args.regen_path), args.output)
 
 
 def _cmd_info(pdf_path: Path) -> None:
@@ -128,7 +146,7 @@ def _parse_page_range(page_spec: str | None, total_pages: int) -> list[int]:
     return [p for p in pages if 1 <= p <= total_pages]
 
 
-def _cmd_render(pdf_path: Path, pages_spec: str | None, output: str | None) -> None:
+def _cmd_render(pdf_path: Path, pages_spec: str | None, output: str | None, report: bool = False) -> None:
     """Render pages from a PDF back to a new PDF via the extraction pipeline."""
     from src.rendering.page_renderer import render_pages_to_pdf
     import fitz
@@ -148,8 +166,29 @@ def _cmd_render(pdf_path: Path, pages_spec: str | None, output: str | None) -> N
     print(f"Rendering pages: {page_numbers}")
 
     result = render_pages_to_pdf(pdf_path, page_numbers, output_path)
-
     print(f"Output: {result} ({len(page_numbers)} pages)")
+
+    if report:
+        _cmd_report(pdf_path, output_path, None)
+
+
+def _cmd_report(pdf_path: Path, regen_path: Path, output: str | None) -> None:
+    """Generate a fidelity report comparing original vs regenerated PDF."""
+    from src.report import generate_report
+
+    if output:
+        report_path = Path(output)
+    else:
+        report_path = Path("output") / f"{pdf_path.stem}_report.md"
+
+    print(f"Generating report...")
+    report = generate_report(pdf_path, regen_path, report_path)
+    print(f"Report: {report_path}")
+
+    # Print summary to console
+    for line in report.split("\n"):
+        if line.startswith("| Average") or line.startswith("| Pages with") or line.startswith("| Word"):
+            print(f"  {line}")
 
 
 if __name__ == "__main__":

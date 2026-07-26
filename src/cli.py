@@ -67,6 +67,39 @@ def main() -> None:
     info_parser = subparsers.add_parser("info", help="Show PDF metadata without full extraction")
     info_parser.add_argument("pdf_path", type=str, help="Path to the PDF file")
 
+    # OCR ingest command
+    ocr_parser = subparsers.add_parser(
+        "ocr-ingest", help="Ingest a scanned/flattened PDF using OCR models"
+    )
+    ocr_parser.add_argument("pdf_path", type=str, help="Path to the scanned PDF file")
+    ocr_parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="./output",
+        help="Output directory (default: ./output)",
+    )
+    ocr_parser.add_argument(
+        "--region",
+        type=str,
+        default="us-east-1",
+        help="AWS region for API calls (default: us-east-1)",
+    )
+    ocr_parser.add_argument(
+        "--no-rekognition",
+        action="store_true",
+        help="Skip Rekognition (diagram label detection)",
+    )
+    ocr_parser.add_argument(
+        "--no-classify",
+        action="store_true",
+        help="Skip Bedrock page classification",
+    )
+    ocr_parser.add_argument(
+        "--no-disambiguate",
+        action="store_true",
+        help="Skip Bedrock conflict resolution",
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -81,6 +114,8 @@ def main() -> None:
         _cmd_render(Path(args.pdf_path), args.pages, args.output, args.report)
     elif args.command == "report":
         _cmd_report(Path(args.pdf_path), Path(args.regen_path), args.output)
+    elif args.command == "ocr-ingest":
+        _cmd_ocr_ingest(args)
 
 
 def _cmd_info(pdf_path: Path) -> None:
@@ -198,6 +233,68 @@ def _cmd_report(pdf_path: Path, regen_path: Path, output: str | None) -> None:
             or line.startswith("| Word")
         ):
             print(f"  {line}")
+
+
+def _cmd_ocr_ingest(args) -> None:
+    """Run OCR pipeline on a scanned/flattened PDF."""
+    from src.ocr import ocr_ingest
+    from src.serialization import to_yaml
+
+    pdf_path = Path(args.pdf_path)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"OCR Ingestion: {pdf_path}")
+    print(f"  Region: {args.region}")
+    print(f"  Rekognition: {'yes' if not args.no_rekognition else 'no'}")
+    print(f"  Bedrock classify: {'yes' if not args.no_classify else 'no'}")
+    print(f"  Bedrock disambiguate: {'yes' if not args.no_disambiguate else 'no'}")
+    print()
+
+    document_ir, cost_tracker, review_flags = ocr_ingest(
+        pdf_path,
+        region=args.region,
+        use_rekognition=not args.no_rekognition,
+        use_bedrock_classify=not args.no_classify,
+        use_bedrock_disambiguate=not args.no_disambiguate,
+    )
+
+    # Save Document IR
+    ir_path = output_dir / f"{pdf_path.stem}_ocr_document_ir.yaml"
+    to_yaml(document_ir, ir_path)
+    print(f"Document IR: {ir_path}")
+    print(f"  Pages: {document_ir.page_count}")
+    total_blocks = sum(len(p.text_blocks) for p in document_ir.pages)
+    print(f"  Text blocks: {total_blocks}")
+
+    # Save review flags
+    if review_flags:
+        flags_path = output_dir / f"{pdf_path.stem}_review_flags.md"
+        with open(flags_path, "w") as f:
+            f.write(f"# Human Review Flags: {pdf_path.name}\n\n")
+            f.write(f"Total flags: {len(review_flags)}\n\n")
+            f.write("| Page | Reason | Candidates | Confidence |\n")
+            f.write("|------|--------|------------|------------|\n")
+            for flag in review_flags:
+                cands = ", ".join(f'"{c}"' for c in flag.candidates)
+                f.write(
+                    f"| {flag.page} | {flag.reason} | {cands} | "
+                    f"{flag.confidence:.0f}% |\n"
+                )
+        print(f"  Review flags: {len(review_flags)} -> {flags_path}")
+    else:
+        print("  Review flags: 0 (all high confidence)")
+
+    # Cost summary
+    print()
+    print(cost_tracker.summary())
+
+    # Save cost report
+    cost_path = output_dir / f"{pdf_path.stem}_ocr_cost.md"
+    with open(cost_path, "w") as f:
+        f.write(f"# OCR Cost Report: {pdf_path.name}\n\n")
+        f.write(cost_tracker.summary())
+    print(f"\nCost report: {cost_path}")
 
 
 if __name__ == "__main__":

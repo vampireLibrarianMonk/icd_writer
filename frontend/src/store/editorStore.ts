@@ -98,15 +98,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   undo: async () => {
-    await api.undo();
-    const { currentPage } = get();
-    const pageData = await api.getPage(currentPage);
-    set((state) => ({
-      pageData,
-      editCount: Math.max(0, state.editCount - 1),
-      selectedBlock: null,
-      editText: "",
-    }));
+    try {
+      const result = await api.undo();
+      if (result.status === "undone") {
+        const { currentPage } = get();
+        const pageData = await api.getPage(currentPage);
+        set((state) => ({
+          pageData,
+          editCount: Math.max(0, state.editCount - 1),
+          selectedBlock: null,
+          editText: "",
+        }));
+      }
+    } catch (e) {
+      console.error("Undo failed:", e);
+    }
   },
 
   redo: async () => {

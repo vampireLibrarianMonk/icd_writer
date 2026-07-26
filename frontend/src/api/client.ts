@@ -60,11 +60,13 @@ export const api = {
 
   async undo(): Promise<any> {
     const res = await fetch(`${API_BASE}/document/undo`, { method: "POST" });
+    if (!res.ok) return { status: "nothing_to_undo" };
     return res.json();
   },
 
   async redo(): Promise<any> {
     const res = await fetch(`${API_BASE}/document/redo`, { method: "POST" });
+    if (!res.ok) return { status: "nothing_to_redo" };
     return res.json();
   },
 

@@ -219,30 +219,70 @@ def extract_page_elements(pdf_path: Path | str, page_number: int) -> tuple[float
                     except Exception:
                         pass
 
-                # For small diagram element images with black borders, apply a
-                # slight inset to prevent border overlap when boxes are adjacent.
-                # This compensates for interpolation differences between renderers.
+                # For small diagram element images with black borders, crop the
+                # border pixels from the source image before embedding. This prevents
+                # thick black bands where adjacent boxes overlap. The visual border
+                # is provided by the container rectangle strokes in the drawing layer.
                 if bbox.width < 100 and bbox.height < 60:
                     from PIL import Image as PILImage
                     import io
                     try:
                         pil_img = PILImage.open(io.BytesIO(img["image"]))
                         arr = __import__("numpy").array(pil_img)
-                        if arr.ndim >= 3:
-                            # Check if image has dark border pixels
-                            edge_dark = (arr[0, :, :3].max(axis=1) < 30).any() or \
-                                        (arr[-1, :, :3].max(axis=1) < 30).any()
-                            if edge_dark:
-                                # Inset to reduce border stacking when adjacent
-                                # boxes overlap. The source images have ~2.5pt black
-                                # borders that stack when overlapping.
-                                inset = 0.5
-                                bbox = BoundingBox(
-                                    x0=bbox.x0 + inset,
-                                    y0=bbox.y0 + inset,
-                                    x1=bbox.x1 - inset,
-                                    y1=bbox.y1 - inset,
-                                )
+                        if arr.ndim >= 3 and arr.shape[0] > 10 and arr.shape[1] > 10:
+                            # Detect border width on each side
+                            h, w = arr.shape[0], arr.shape[1]
+                            mid_row, mid_col = h // 2, w // 2
+
+                            top_b = 0
+                            for row in range(h):
+                                if arr[row, mid_col, :3].max() < 30:
+                                    top_b += 1
+                                else:
+                                    break
+
+                            bot_b = 0
+                            for row in range(h - 1, -1, -1):
+                                if arr[row, mid_col, :3].max() < 30:
+                                    bot_b += 1
+                                else:
+                                    break
+
+                            left_b = 0
+                            for col in range(w):
+                                if arr[mid_row, col, :3].max() < 30:
+                                    left_b += 1
+                                else:
+                                    break
+
+                            right_b = 0
+                            for col in range(w - 1, -1, -1):
+                                if arr[mid_row, col, :3].max() < 30:
+                                    right_b += 1
+                                else:
+                                    break
+
+                            # If image has borders, crop them and adjust bbox
+                            if left_b > 2 or right_b > 2 or top_b > 2 or bot_b > 2:
+                                # Calculate the pt-per-pixel scale
+                                px_to_pt_x = bbox.width / w
+                                px_to_pt_y = bbox.height / h
+
+                                # Crop the image
+                                cropped = arr[top_b:h - bot_b, left_b:w - right_b]
+                                if cropped.shape[0] > 2 and cropped.shape[1] > 2:
+                                    # Adjust bbox to match cropped area
+                                    bbox = BoundingBox(
+                                        x0=bbox.x0 + left_b * px_to_pt_x,
+                                        y0=bbox.y0 + top_b * px_to_pt_y,
+                                        x1=bbox.x1 - right_b * px_to_pt_x,
+                                        y1=bbox.y1 - bot_b * px_to_pt_y,
+                                    )
+                                    # Re-encode cropped image
+                                    cropped_pil = PILImage.fromarray(cropped)
+                                    buf = io.BytesIO()
+                                    cropped_pil.save(buf, format="PNG")
+                                    img["image"] = buf.getvalue()
                     except Exception:
                         pass
 

@@ -28,23 +28,18 @@ def render_ir_to_pdf(
     output_path: Path | str,
     pages: list[int] | None = None,
 ) -> Path:
-    """Render a Document IR to PDF, using source PDF for images/drawings.
+    """Render a Document IR to PDF, using the same pipeline as direct rendering.
 
-    The text comes from the IR (reflecting edits). Images and vector
-    graphics come from the source PDF (unchanged). This allows text
-    edits to appear in the output while preserving all other elements.
+    For unedited blocks: uses exact character positions from source PDF.
+    For edited blocks: re-renders with word-level positioning (same as pipeline).
 
-    Args:
-        document_ir: The (possibly edited) Document IR.
-        source_pdf: Original PDF for images/drawings.
-        output_path: Where to save the output PDF.
-        pages: Optional list of 1-based page numbers to render.
-            If None, renders all pages.
-
-    Returns:
-        Path to the output PDF.
+    This ensures the export matches the pipeline quality, with edits applied.
     """
     from weasyprint import HTML
+
+    from src.rendering.extract import extract_page_elements
+    from src.rendering.elements import TextElement
+    from src.rendering.renderer import render_page_to_html
 
     source_pdf = Path(source_pdf)
     output_path = Path(output_path)
@@ -61,40 +56,38 @@ def render_ir_to_pdf(
             continue
 
         page_info = document_ir.pages[page_idx]
-        page_width = page_info.width_pt
-        page_height = page_info.height_pt
 
-        # Get non-text elements (images, drawings) from source PDF
-        _, _, source_elements = extract_page_elements(source_pdf, page_num)
-        non_text_elements = [
-            e for e in source_elements if not isinstance(e, TextElement)
-        ]
+        # Extract all elements from source PDF (full fidelity)
+        page_width, page_height, elements = extract_page_elements(source_pdf, page_num)
 
-        # Build text elements from the IR (reflects edits)
-        text_elements: list[PageElement] = []
-        for block in page_info.text_blocks:
-            text_elements.append(
-                TextElement(
-                    text=block.text_verbatim,
-                    bbox=block.bbox,
-                    font_name=block.style.font_name or "Times New Roman"
-                    if block.style
-                    else "Times New Roman",
-                    font_size_pt=block.style.font_size_pt
-                    if block.style
-                    else 11.0,
-                    bold=block.style.bold if block.style else False,
-                    italic=block.style.italic if block.style else False,
-                    color="#000000",
-                    char_positions=None,  # Will use fallback word positioning
-                )
-            )
+        # Find edited blocks by comparing IR text to extracted text
+        ir_texts = {b.id: b.text_verbatim for b in page_info.text_blocks}
 
-        # Combine: non-text first (background), then text on top
-        all_elements = non_text_elements + text_elements
+        # Replace text in elements where the IR has been edited
+        patched_elements = []
+        for elem in elements:
+            if isinstance(elem, TextElement):
+                # Find matching IR block by position
+                for block in page_info.text_blocks:
+                    if (abs(block.bbox.x0 - elem.bbox.x0) < 1 and
+                            abs(block.bbox.y0 - elem.bbox.y0) < 1):
+                        if block.text_verbatim != elem.text:
+                            # This block was edited — use IR text, lose char positions
+                            elem = TextElement(
+                                text=block.text_verbatim,
+                                bbox=elem.bbox,
+                                font_name=elem.font_name,
+                                font_size_pt=elem.font_size_pt,
+                                bold=elem.bold,
+                                italic=elem.italic,
+                                color=elem.color,
+                                char_positions=None,  # will use word-level fallback
+                            )
+                        break
+            patched_elements.append(elem)
 
-        # Render to HTML then PDF
-        html_content = render_page_to_html(page_width, page_height, all_elements)
+        # Render with the pipeline renderer
+        html_content = render_page_to_html(page_width, page_height, patched_elements)
         pdf_bytes = HTML(string=html_content).write_pdf()
 
         single_doc = fitz_lib.open(stream=pdf_bytes, filetype="pdf")

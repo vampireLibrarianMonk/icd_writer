@@ -18,6 +18,8 @@ interface EditorState {
   sessionId: string | null;
   editCount: number;
   refreshTrigger: number;
+  canUndo: boolean;
+  canRedo: boolean;
 
   // Actions
   loadDocument: (path: string) => Promise<void>;
@@ -41,6 +43,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   sessionId: null,
   editCount: 0,
   refreshTrigger: 0,
+  canUndo: false,
+  canRedo: false,
 
   loadDocument: async (path: string) => {
     // Start session
@@ -83,12 +87,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     await api.editBlock(selectedBlock.id, editText);
 
-    // Refresh page data
+    // Refresh page data and undo state
     const pageData = await api.getPage(currentPage);
+    const actions = await api.getActions();
     set((state) => ({
       pageData,
       editCount: state.editCount + 1,
       selectedBlock: pageData.blocks.find((b) => b.id === selectedBlock.id) || null,
+      canUndo: actions.undo_available,
+      canRedo: actions.redo_available,
     }));
   },
 
@@ -105,12 +112,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (result.status === "undone") {
         const { currentPage } = get();
         const pageData = await api.getPage(currentPage);
+        const actions = await api.getActions();
         set((state) => ({
           pageData,
           editCount: Math.max(0, state.editCount - 1),
           selectedBlock: null,
           editText: "",
           refreshTrigger: state.refreshTrigger + 1,
+          canUndo: actions.undo_available,
+          canRedo: actions.redo_available,
         }));
       }
     } catch (e) {

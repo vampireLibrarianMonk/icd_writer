@@ -3,7 +3,7 @@ import { api } from "../api/client";
 import { useRef } from "react";
 
 export function Toolbar() {
-  const { documentLoaded, editCount, undo, redo } = useEditorStore();
+  const { documentLoaded, editCount, undo, redo, canUndo, canRedo } = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleOpen = () => {
@@ -62,8 +62,8 @@ export function Toolbar() {
       <button onClick={handleSave} disabled={!documentLoaded}>Save</button>
       <button onClick={handleExport} disabled={!documentLoaded}>Export PDF</button>
       <span style={{ borderLeft: "1px solid #ccc", height: "20px", margin: "0 8px" }} />
-      <button onClick={undo} disabled={!documentLoaded}>Undo</button>
-      <button onClick={redo} disabled={!documentLoaded}>Redo</button>
+      <button onClick={undo} disabled={!canUndo}>Undo</button>
+      <button onClick={redo} disabled={!canRedo}>Redo</button>
       <span style={{ borderLeft: "1px solid #ccc", height: "20px", margin: "0 8px" }} />
       {documentLoaded && (
         <span style={{ fontSize: "12px", color: "#666" }}>

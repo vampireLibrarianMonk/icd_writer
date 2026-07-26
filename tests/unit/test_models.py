@@ -1,6 +1,6 @@
 """Unit tests for the data models."""
 
-from src.models.common import BoundingBox, DocumentMetadata, Provenance
+from src.models.common import BoundingBox, DocumentMetadata
 from src.models.document_ir import (
     DocumentIR,
     PageClassification,
@@ -11,7 +11,6 @@ from src.models.document_ir import (
 )
 from src.models.icd_ir import (
     Interface,
-    Message,
     Requirement,
     RequirementType,
     SemanticIcdIR,
@@ -122,9 +121,7 @@ def test_semantic_icd_ir():
                 extraction_confidence=0.9,
             )
         ],
-        interfaces=[
-            Interface(id="IF-001", name="Cmd Upload", requirements=["REQ-001"])
-        ],
+        interfaces=[Interface(id="IF-001", name="Cmd Upload", requirements=["REQ-001"])],
     )
     assert icd.document_id == "NASA-ICD-001"
     assert len(icd.requirements) == 1

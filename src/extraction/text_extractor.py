@@ -147,11 +147,8 @@ def _get_dominant_style(block: dict) -> TextStyle:
     )
 
 
-def _classify_block_type(
-    text: str, style: TextStyle, bbox: BoundingBox, page: fitz.Page
-) -> str:
+def _classify_block_type(text: str, style: TextStyle, bbox: BoundingBox, page: fitz.Page) -> str:
     """Classify a text block as heading, paragraph, caption, etc."""
-    page_width = page.rect.width
     page_height = page.rect.height
 
     # Short text in large font near top is likely a heading

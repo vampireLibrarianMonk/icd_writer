@@ -7,7 +7,6 @@ coordinates, fonts, tables, images, and reading order.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -45,12 +44,12 @@ class PageClassification(BaseModel):
 class TextStyle(BaseModel):
     """Typography information for a text element."""
 
-    font_name: Optional[str] = None
-    font_size_pt: Optional[float] = None
+    font_name: str | None = None
+    font_size_pt: float | None = None
     bold: bool = False
     italic: bool = False
     underline: bool = False
-    color: Optional[str] = None  # hex color
+    color: str | None = None  # hex color
 
 
 class TextBlock(BaseModel):
@@ -61,9 +60,9 @@ class TextBlock(BaseModel):
     page: int
     bbox: BoundingBox
     text_verbatim: str
-    text_normalized: Optional[str] = None
+    text_normalized: str | None = None
     reading_order: int = 0
-    style: Optional[TextStyle] = None
+    style: TextStyle | None = None
     confidence: float = Field(ge=0.0, le=1.0, default=1.0)
     is_ocr: bool = False
 
@@ -74,7 +73,7 @@ class TableCell(BaseModel):
     value: str
     row_span: int = 1
     col_span: int = 1
-    bbox: Optional[BoundingBox] = None
+    bbox: BoundingBox | None = None
     confidence: float = Field(ge=0.0, le=1.0, default=1.0)
 
 
@@ -96,14 +95,14 @@ class TableBlock(BaseModel):
     """A table extracted from the document."""
 
     id: str
-    caption: Optional[str] = None
+    caption: str | None = None
     page: int
     bbox: BoundingBox
     columns: list[TableColumn]
     rows: list[TableRow]
     confidence: float = Field(ge=0.0, le=1.0, default=0.0)
     spans_pages: bool = False
-    continuation_of: Optional[str] = None  # ID of table this continues
+    continuation_of: str | None = None  # ID of table this continues
 
 
 class FigureBlock(BaseModel):
@@ -112,9 +111,9 @@ class FigureBlock(BaseModel):
     id: str
     page: int
     bbox: BoundingBox
-    caption: Optional[str] = None
+    caption: str | None = None
     figure_type: str = "raster"  # raster, vector, diagram, chart
-    image_path: Optional[str] = None  # path to extracted image file
+    image_path: str | None = None  # path to extracted image file
     confidence: float = Field(ge=0.0, le=1.0, default=1.0)
 
 
@@ -140,7 +139,7 @@ class DocumentIR(BaseModel):
 
     metadata: DocumentMetadata
     pages: list[PageInfo] = Field(default_factory=list)
-    provenance: Optional[Provenance] = None
+    provenance: Provenance | None = None
 
     @property
     def page_count(self) -> int:

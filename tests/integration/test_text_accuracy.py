@@ -5,7 +5,7 @@ from pathlib import Path
 import fitz
 import pytest
 
-from src.rendering.page_renderer import render_page_to_pdf
+from src.rendering import render_page_to_pdf
 
 ICDS_DIR = Path(__file__).parent.parent.parent / "icds"
 SAMPLE_PDFS = list(ICDS_DIR.glob("*.pdf"))

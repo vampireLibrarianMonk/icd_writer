@@ -44,7 +44,6 @@ def classify_pages(pdf_path: Path | str) -> list[PageClassification]:
 
             # Extract text and analyze
             text = page.get_text("text")
-            text_dict = page.get_text("dict")
             page_rect = page.rect
             page_area = page_rect.width * page_rect.height
 

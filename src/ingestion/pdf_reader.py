@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import fitz  # PyMuPDF
 
@@ -43,7 +42,7 @@ def compute_sha256(path: Path) -> str:
     return sha256.hexdigest()
 
 
-def _parse_pdf_date(date_str: Optional[str]) -> Optional[datetime]:
+def _parse_pdf_date(date_str: str | None) -> datetime | None:
     """Parse a PDF date string (D:YYYYMMDDHHmmSS format) to datetime."""
     if not date_str:
         return None
@@ -54,7 +53,17 @@ def _parse_pdf_date(date_str: Optional[str]) -> Optional[datetime]:
     for fmt in ("%Y%m%d%H%M%S", "%Y%m%d%H%M", "%Y%m%d", "%Y"):
         try:
             # Handle timezone suffix by truncating
-            clean = date_str[:len(fmt.replace("%", "").replace("Y", "1111").replace("m", "11").replace("d", "11").replace("H", "11").replace("M", "11").replace("S", "11"))]
+            clean = date_str[
+                : len(
+                    fmt.replace("%", "")
+                    .replace("Y", "1111")
+                    .replace("m", "11")
+                    .replace("d", "11")
+                    .replace("H", "11")
+                    .replace("M", "11")
+                    .replace("S", "11")
+                )
+            ]
             return datetime.strptime(date_str[: len(clean)], fmt)
         except (ValueError, IndexError):
             continue

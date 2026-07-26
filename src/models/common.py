@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -34,8 +33,8 @@ class SourceReference(BaseModel):
     """Reference back to the original source location."""
 
     page: int
-    block_id: Optional[str] = None
-    bbox: Optional[BoundingBox] = None
+    block_id: str | None = None
+    bbox: BoundingBox | None = None
 
 
 class Provenance(BaseModel):
@@ -44,12 +43,12 @@ class Provenance(BaseModel):
     source_document: str
     source_sha256: str
     page: int
-    bbox: Optional[BoundingBox] = None
+    bbox: BoundingBox | None = None
     extraction_engine: str
     extraction_engine_version: str
     extraction_confidence: float = Field(ge=0.0, le=1.0)
     extraction_timestamp: datetime
-    reviewer: Optional[str] = None
+    reviewer: str | None = None
     human_verified: bool = False
 
 
@@ -68,10 +67,10 @@ class DocumentMetadata(BaseModel):
     filename: str
     sha256: str
     page_count: int
-    title: Optional[str] = None
-    author: Optional[str] = None
-    subject: Optional[str] = None
-    creator: Optional[str] = None
-    creation_date: Optional[datetime] = None
-    modification_date: Optional[datetime] = None
+    title: str | None = None
+    author: str | None = None
+    subject: str | None = None
+    creator: str | None = None
+    creation_date: datetime | None = None
+    modification_date: datetime | None = None
     file_size_bytes: int = 0

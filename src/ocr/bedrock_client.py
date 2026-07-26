@@ -80,8 +80,10 @@ Respond with ONLY valid JSON, no explanation."""
                     ],
                 }
             ],
-            "max_tokens": 500,
-            "temperature": 0.0,
+            "inferenceConfig": {
+                "maxTokens": 500,
+                "temperature": 0.0,
+            },
         }
     )
 
@@ -96,8 +98,8 @@ Respond with ONLY valid JSON, no explanation."""
 
     # Extract token counts for cost tracking
     usage = response_body.get("usage", {})
-    tokens_in = usage.get("input_tokens", 1000)  # estimate if not provided
-    tokens_out = usage.get("output_tokens", 100)
+    tokens_in = usage.get("inputTokens", 1000)
+    tokens_out = usage.get("outputTokens", 100)
 
     cost_tracker.record(
         service="bedrock",
@@ -115,7 +117,7 @@ Respond with ONLY valid JSON, no explanation."""
             break
 
     result = PageClassificationResult(
-        page_number=page_number, model=model_id
+        page_number=page_number, page_type="text", model=model_id
     )
 
     try:
@@ -128,11 +130,14 @@ Respond with ONLY valid JSON, no explanation."""
         # Convert diagram regions from percentages to points
         for region_pct in parsed.get("diagram_regions", []):
             if len(region_pct) == 4:
-                x = region_pct[0] / 100 * page_width_pt
-                y = region_pct[1] / 100 * page_height_pt
-                w = region_pct[2] / 100 * page_width_pt
-                h = region_pct[3] / 100 * page_height_pt
-                result.diagram_regions.append((x, y, x + w, y + h))
+                try:
+                    x = float(region_pct[0]) / 100 * page_width_pt
+                    y = float(region_pct[1]) / 100 * page_height_pt
+                    w = float(region_pct[2]) / 100 * page_width_pt
+                    h = float(region_pct[3]) / 100 * page_height_pt
+                    result.diagram_regions.append((x, y, x + w, y + h))
+                except (ValueError, TypeError):
+                    pass
 
         body_size = parsed.get("estimated_body_font_size_pt", 11.0)
         result.estimated_font_sizes["body"] = body_size
@@ -150,7 +155,7 @@ def disambiguate_text(
     region_bbox: tuple[float, float, float, float],
     page_number: int,
     cost_tracker: CostTracker,
-    model_id: str = "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+    model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0",
     region: str = "us-east-1",
 ) -> tuple[str, float]:
     """Use Claude vision to resolve ambiguous OCR results.

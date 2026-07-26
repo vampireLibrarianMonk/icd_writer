@@ -146,23 +146,27 @@ def ocr_ingest(
         if use_bedrock_disambiguate:
             for flag in ensemble.review_flags:
                 if flag.reason == "Model disagreement" and len(flag.candidates) > 1:
-                    best_text, conf = disambiguate_text(
-                        image_bytes,
-                        flag.candidates,
-                        flag.bbox,
-                        page_number,
-                        cost_tracker,
-                        region=region,
-                    )
-                    # Update the word with the resolved text
-                    for word in ensemble.words:
-                        if (
-                            abs(word.x0 - flag.bbox[0]) < 2
-                            and abs(word.y0 - flag.bbox[1]) < 2
-                        ):
-                            word.text = best_text
-                            word.confidence = conf * 100
-                            break
+                    try:
+                        best_text, conf = disambiguate_text(
+                            image_bytes,
+                            flag.candidates,
+                            flag.bbox,
+                            page_number,
+                            cost_tracker,
+                            region=region,
+                        )
+                        # Update the word with the resolved text
+                        for word in ensemble.words:
+                            if (
+                                abs(word.x0 - flag.bbox[0]) < 2
+                                and abs(word.y0 - flag.bbox[1]) < 2
+                            ):
+                                word.text = best_text
+                                word.confidence = conf * 100
+                                break
+                    except Exception as e:
+                        # If disambiguation fails, keep the Textract result
+                        flag.reason = f"Model disagreement (disambiguation failed: {e})"
 
         all_review_flags.extend(ensemble.review_flags)
 

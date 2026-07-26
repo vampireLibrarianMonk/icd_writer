@@ -54,15 +54,24 @@ export function TableEditor() {
       newData.data[editingCell.row][editingCell.col] = { ...cell, text: cellText };
       setTableData(newData as TableData);
 
-      // Try to persist via block edit if block_id exists
+      // Persist via block edit if block_id exists, otherwise use table-cell endpoint
       if (cell.block_id) {
         await fetch(`http://localhost:8000/document/block/${cell.block_id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ new_text: cellText }),
         });
+      } else {
+        await fetch(
+          `http://localhost:8000/document/table-cell?page=${currentPage}&old_text=${encodeURIComponent(cell.text)}&new_text=${encodeURIComponent(cellText)}`,
+          { method: "PUT" }
+        );
       }
     }
+    setEditingCell(null);
+  };
+
+  const handleCellCancel = () => {
     setEditingCell(null);
   };
 
@@ -104,23 +113,37 @@ export function TableEditor() {
                       title={cell.text}
                     >
                       {isEditing ? (
-                        <input
-                          value={cellText}
-                          onChange={(e) => setCellText(e.target.value)}
-                          onBlur={handleCellSave}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleCellSave();
-                            if (e.key === "Escape") setEditingCell(null);
-                          }}
-                          autoFocus
-                          style={{
-                            width: "100%",
-                            border: "none",
-                            outline: "none",
-                            background: "transparent",
-                            fontSize: "11px",
-                          }}
-                        />
+                        <div style={{ display: "flex", gap: "2px", alignItems: "center" }}>
+                          <input
+                            value={cellText}
+                            onChange={(e) => setCellText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleCellSave();
+                              if (e.key === "Escape") handleCellCancel();
+                            }}
+                            autoFocus
+                            style={{
+                              width: "100%",
+                              border: "1px solid #2196F3",
+                              outline: "none",
+                              padding: "2px 4px",
+                              fontSize: "11px",
+                              borderRadius: "2px",
+                            }}
+                          />
+                          <button
+                            onClick={handleCellSave}
+                            style={{ fontSize: "10px", padding: "1px 4px", background: "#2196F3", color: "white", border: "none", borderRadius: "2px", cursor: "pointer" }}
+                          >
+                            ✓
+                          </button>
+                          <button
+                            onClick={handleCellCancel}
+                            style={{ fontSize: "10px", padding: "1px 4px", background: "#eee", border: "1px solid #ccc", borderRadius: "2px", cursor: "pointer" }}
+                          >
+                            ✗
+                          </button>
+                        </div>
                       ) : (
                         cell.text || "—"
                       )}

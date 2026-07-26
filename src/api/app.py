@@ -393,6 +393,39 @@ def create_app() -> FastAPI:
 
     # ─── Editing ───────────────────────────────────────────────────
 
+
+    @app.put("/document/table-cell")
+    def edit_table_cell(page: int, old_text: str, new_text: str):
+        """Edit a table cell by finding and replacing text in the IR.
+
+        Since table cells don't have direct block_ids, we find the block
+        containing the old text and replace it.
+        """
+        doc_ir = state["document_ir"]
+        if not doc_ir:
+            raise HTTPException(404, "No document loaded")
+
+        if page < 1 or page > doc_ir.page_count:
+            raise HTTPException(400, f"Invalid page: {page}")
+
+        page_info = doc_ir.pages[page - 1]
+        for block in page_info.text_blocks:
+            if old_text in block.text_verbatim:
+                block.text_verbatim = block.text_verbatim.replace(old_text, new_text)
+
+                session = state["session"]
+                if session:
+                    session.record(
+                        ActionType.BLOCK_EDITED,
+                        page=page,
+                        block_id=block.id,
+                        data={"old_text": old_text, "new_text": new_text},
+                    )
+
+                return {"status": "updated", "block_id": block.id}
+
+        raise HTTPException(404, f"Text not found on page {page}")
+
     @app.put("/document/block/{block_id}")
     def edit_block(block_id: str, req: EditRequest):
         """Edit a text block's content."""

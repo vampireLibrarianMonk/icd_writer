@@ -1,0 +1,700 @@
+{
+  "$defs": {
+    "BoundingBox": {
+      "description": "Bounding box coordinates in points (PDF coordinate system).",
+      "properties": {
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x0",
+        "y0",
+        "x1",
+        "y1"
+      ],
+      "title": "BoundingBox",
+      "type": "object"
+    },
+    "DocumentMetadata": {
+      "description": "Top-level metadata for a source document.",
+      "properties": {
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "page_count": {
+          "title": "Page Count",
+          "type": "integer"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "author": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "creator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Creator"
+        },
+        "creation_date": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Creation Date"
+        },
+        "modification_date": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modification Date"
+        },
+        "file_size_bytes": {
+          "default": 0,
+          "title": "File Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "filename",
+        "sha256",
+        "page_count"
+      ],
+      "title": "DocumentMetadata",
+      "type": "object"
+    },
+    "FigureBlock": {
+      "description": "A figure or image extracted from the document.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "page": {
+          "title": "Page",
+          "type": "integer"
+        },
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption"
+        },
+        "figure_type": {
+          "default": "raster",
+          "title": "Figure Type",
+          "type": "string"
+        },
+        "image_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Path"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "page",
+        "bbox"
+      ],
+      "title": "FigureBlock",
+      "type": "object"
+    },
+    "PageClassification": {
+      "description": "Classification result for a single page.",
+      "properties": {
+        "page_number": {
+          "title": "Page Number",
+          "type": "integer"
+        },
+        "classifications": {
+          "items": {
+            "$ref": "#/$defs/PageClassificationType"
+          },
+          "title": "Classifications",
+          "type": "array"
+        },
+        "native_text_available": {
+          "default": true,
+          "title": "Native Text Available",
+          "type": "boolean"
+        },
+        "ocr_required": {
+          "default": false,
+          "title": "Ocr Required",
+          "type": "boolean"
+        },
+        "rotation_degrees": {
+          "default": 0.0,
+          "title": "Rotation Degrees",
+          "type": "number"
+        },
+        "confidence": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "page_number",
+        "classifications"
+      ],
+      "title": "PageClassification",
+      "type": "object"
+    },
+    "PageClassificationType": {
+      "description": "Classification types for PDF pages.",
+      "enum": [
+        "native_digital_text",
+        "scanned",
+        "mixed_content",
+        "table_heavy",
+        "diagram_heavy",
+        "drawing_heavy",
+        "image_only",
+        "cover",
+        "revision_history",
+        "table_of_contents",
+        "requirements",
+        "appendix"
+      ],
+      "title": "PageClassificationType",
+      "type": "string"
+    },
+    "PageInfo": {
+      "description": "Complete information for a single page.",
+      "properties": {
+        "page_number": {
+          "title": "Page Number",
+          "type": "integer"
+        },
+        "width_pt": {
+          "title": "Width Pt",
+          "type": "number"
+        },
+        "height_pt": {
+          "title": "Height Pt",
+          "type": "number"
+        },
+        "classification": {
+          "$ref": "#/$defs/PageClassification"
+        },
+        "text_blocks": {
+          "items": {
+            "$ref": "#/$defs/TextBlock"
+          },
+          "title": "Text Blocks",
+          "type": "array"
+        },
+        "tables": {
+          "items": {
+            "$ref": "#/$defs/TableBlock"
+          },
+          "title": "Tables",
+          "type": "array"
+        },
+        "figures": {
+          "items": {
+            "$ref": "#/$defs/FigureBlock"
+          },
+          "title": "Figures",
+          "type": "array"
+        }
+      },
+      "required": [
+        "page_number",
+        "width_pt",
+        "height_pt",
+        "classification"
+      ],
+      "title": "PageInfo",
+      "type": "object"
+    },
+    "Provenance": {
+      "description": "Full provenance record for any extracted element.",
+      "properties": {
+        "source_document": {
+          "title": "Source Document",
+          "type": "string"
+        },
+        "source_sha256": {
+          "title": "Source Sha256",
+          "type": "string"
+        },
+        "page": {
+          "title": "Page",
+          "type": "integer"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "extraction_engine": {
+          "title": "Extraction Engine",
+          "type": "string"
+        },
+        "extraction_engine_version": {
+          "title": "Extraction Engine Version",
+          "type": "string"
+        },
+        "extraction_confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Extraction Confidence",
+          "type": "number"
+        },
+        "extraction_timestamp": {
+          "format": "date-time",
+          "title": "Extraction Timestamp",
+          "type": "string"
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer"
+        },
+        "human_verified": {
+          "default": false,
+          "title": "Human Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "source_document",
+        "source_sha256",
+        "page",
+        "extraction_engine",
+        "extraction_engine_version",
+        "extraction_confidence",
+        "extraction_timestamp"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "TableBlock": {
+      "description": "A table extracted from the document.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption"
+        },
+        "page": {
+          "title": "Page",
+          "type": "integer"
+        },
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox"
+        },
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/TableColumn"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/TableRow"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "confidence": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "spans_pages": {
+          "default": false,
+          "title": "Spans Pages",
+          "type": "boolean"
+        },
+        "continuation_of": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Continuation Of"
+        }
+      },
+      "required": [
+        "id",
+        "page",
+        "bbox",
+        "columns",
+        "rows"
+      ],
+      "title": "TableBlock",
+      "type": "object"
+    },
+    "TableCell": {
+      "description": "A single cell in a table.",
+      "properties": {
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "row_span": {
+          "default": 1,
+          "title": "Row Span",
+          "type": "integer"
+        },
+        "col_span": {
+          "default": 1,
+          "title": "Col Span",
+          "type": "integer"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "TableCell",
+      "type": "object"
+    },
+    "TableColumn": {
+      "description": "Definition of a table column.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "TableColumn",
+      "type": "object"
+    },
+    "TableRow": {
+      "description": "A row in the table, mapping column IDs to cells.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "cells": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TableCell"
+          },
+          "title": "Cells",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "cells"
+      ],
+      "title": "TableRow",
+      "type": "object"
+    },
+    "TextBlock": {
+      "description": "A block of text with position and style information.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "block_type": {
+          "default": "paragraph",
+          "title": "Block Type",
+          "type": "string"
+        },
+        "page": {
+          "title": "Page",
+          "type": "integer"
+        },
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox"
+        },
+        "text_verbatim": {
+          "title": "Text Verbatim",
+          "type": "string"
+        },
+        "text_normalized": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text Normalized"
+        },
+        "reading_order": {
+          "default": 0,
+          "title": "Reading Order",
+          "type": "integer"
+        },
+        "style": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextStyle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "is_ocr": {
+          "default": false,
+          "title": "Is Ocr",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "page",
+        "bbox",
+        "text_verbatim"
+      ],
+      "title": "TextBlock",
+      "type": "object"
+    },
+    "TextStyle": {
+      "description": "Typography information for a text element.",
+      "properties": {
+        "font_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Name"
+        },
+        "font_size_pt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Size Pt"
+        },
+        "bold": {
+          "default": false,
+          "title": "Bold",
+          "type": "boolean"
+        },
+        "italic": {
+          "default": false,
+          "title": "Italic",
+          "type": "boolean"
+        },
+        "underline": {
+          "default": false,
+          "title": "Underline",
+          "type": "boolean"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        }
+      },
+      "title": "TextStyle",
+      "type": "object"
+    }
+  },
+  "description": "Document Intermediate Representation.\n\nThe physical document model: pages, layout, text, tables, figures,\ncoordinates, fonts, and reading order. This preserves the original\ndocument structure with full provenance.",
+  "properties": {
+    "metadata": {
+      "$ref": "#/$defs/DocumentMetadata"
+    },
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/PageInfo"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "metadata"
+  ],
+  "title": "DocumentIR",
+  "type": "object"
+}

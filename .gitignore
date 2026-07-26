@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output artifacts
+output/
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Byte-compiled
+*.pyc
+
+# Distribution
+*.whl
+*.tar.gz
+
+# Environment variables
+.env
+.env.local

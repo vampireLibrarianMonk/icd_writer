@@ -1,0 +1,912 @@
+{
+  "$defs": {
+    "Acronym": {
+      "description": "An acronym and its definition.",
+      "properties": {
+        "abbreviation": {
+          "title": "Abbreviation",
+          "type": "string"
+        },
+        "definition": {
+          "title": "Definition",
+          "type": "string"
+        },
+        "first_occurrence_page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Occurrence Page"
+        }
+      },
+      "required": [
+        "abbreviation",
+        "definition"
+      ],
+      "title": "Acronym",
+      "type": "object"
+    },
+    "BoundingBox": {
+      "description": "Bounding box coordinates in points (PDF coordinate system).",
+      "properties": {
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x0",
+        "y0",
+        "x1",
+        "y1"
+      ],
+      "title": "BoundingBox",
+      "type": "object"
+    },
+    "ChangeRecord": {
+      "description": "Record of a change to a requirement or interface.",
+      "properties": {
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "author": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author"
+        }
+      },
+      "required": [
+        "revision",
+        "description"
+      ],
+      "title": "ChangeRecord",
+      "type": "object"
+    },
+    "DataField": {
+      "description": "A data field within a message or packet.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "bit_offset": {
+          "title": "Bit Offset",
+          "type": "integer"
+        },
+        "bit_length": {
+          "title": "Bit Length",
+          "type": "integer"
+        },
+        "data_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Type"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "valid_range": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid Range"
+        },
+        "default_value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Value"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "bit_offset",
+        "bit_length"
+      ],
+      "title": "DataField",
+      "type": "object"
+    },
+    "Interface": {
+      "description": "An interface definition between systems.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "consumer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Consumer"
+        },
+        "transport": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TransportInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "requirements": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Requirements",
+          "type": "array"
+        },
+        "messages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Messages",
+          "type": "array"
+        },
+        "signals": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Signals",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Interface",
+      "type": "object"
+    },
+    "Message": {
+      "description": "A message or packet definition.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Direction"
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
+        "total_bits": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Bits"
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/DataField"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "rate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rate"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Message",
+      "type": "object"
+    },
+    "Requirement": {
+      "description": "A single requirement extracted from an ICD.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "text_verbatim": {
+          "title": "Text Verbatim",
+          "type": "string"
+        },
+        "text_normalized": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text Normalized"
+        },
+        "requirement_type": {
+          "$ref": "#/$defs/RequirementType",
+          "default": "interface_requirement"
+        },
+        "verification_method": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VerificationMethod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "section": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Section"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceReference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "extraction_confidence": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Extraction Confidence",
+          "type": "number"
+        },
+        "human_verified": {
+          "default": false,
+          "title": "Human Verified",
+          "type": "boolean"
+        },
+        "interface_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Interface Ids",
+          "type": "array"
+        },
+        "parent_requirement_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Requirement Id"
+        },
+        "tbx_items": {
+          "items": {
+            "$ref": "#/$defs/TbxStatus"
+          },
+          "title": "Tbx Items",
+          "type": "array"
+        },
+        "change_history": {
+          "items": {
+            "$ref": "#/$defs/ChangeRecord"
+          },
+          "title": "Change History",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "text_verbatim"
+      ],
+      "title": "Requirement",
+      "type": "object"
+    },
+    "RequirementType": {
+      "description": "Types of requirements in an ICD.",
+      "enum": [
+        "functional",
+        "interface_requirement",
+        "performance",
+        "design",
+        "environmental",
+        "safety",
+        "reliability",
+        "data",
+        "constraint",
+        "assumption"
+      ],
+      "title": "RequirementType",
+      "type": "string"
+    },
+    "RevisionInfo": {
+      "description": "Document revision information.",
+      "properties": {
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        },
+        "author": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "approved_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approved By"
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "title": "RevisionInfo",
+      "type": "object"
+    },
+    "Signal": {
+      "description": "A signal definition.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "direction": {
+          "title": "Direction",
+          "type": "string"
+        },
+        "data_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Type"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "rate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rate"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "interface_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interface Id"
+        },
+        "source_system": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source System"
+        },
+        "destination_system": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Destination System"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "direction"
+      ],
+      "title": "Signal",
+      "type": "object"
+    },
+    "SourceReference": {
+      "description": "Reference back to the original source location.",
+      "properties": {
+        "page": {
+          "title": "Page",
+          "type": "integer"
+        },
+        "block_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Block Id"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "page"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    },
+    "System": {
+      "description": "A system or subsystem participating in interfaces.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "system_type": {
+          "default": "system",
+          "title": "System Type",
+          "type": "string"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "interfaces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Interfaces",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "System",
+      "type": "object"
+    },
+    "TbxStatus": {
+      "description": "Status for TBD/TBR/TBC/TBS items.",
+      "enum": [
+        "tbd",
+        "tbr",
+        "tbc",
+        "tbs"
+      ],
+      "title": "TbxStatus",
+      "type": "string"
+    },
+    "TransportInfo": {
+      "description": "Transport layer information for an interface.",
+      "properties": {
+        "protocol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
+        "physical_medium": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Physical Medium"
+        },
+        "data_rate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Rate"
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Encoding"
+        }
+      },
+      "title": "TransportInfo",
+      "type": "object"
+    },
+    "VerificationMethod": {
+      "description": "Methods for verifying requirements.",
+      "enum": [
+        "test",
+        "analysis",
+        "inspection",
+        "demonstration",
+        "similarity"
+      ],
+      "title": "VerificationMethod",
+      "type": "string"
+    }
+  },
+  "description": "Semantic ICD Intermediate Representation.\n\nThe engineering meaning model: requirements, interfaces, messages,\nsignals, systems, protocols, and relationships. Linked to the\nDocument IR through stable identifiers.",
+  "properties": {
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "document_title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Document Title"
+    },
+    "revision": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RevisionInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "revision_history": {
+      "items": {
+        "$ref": "#/$defs/RevisionInfo"
+      },
+      "title": "Revision History",
+      "type": "array"
+    },
+    "systems": {
+      "items": {
+        "$ref": "#/$defs/System"
+      },
+      "title": "Systems",
+      "type": "array"
+    },
+    "interfaces": {
+      "items": {
+        "$ref": "#/$defs/Interface"
+      },
+      "title": "Interfaces",
+      "type": "array"
+    },
+    "requirements": {
+      "items": {
+        "$ref": "#/$defs/Requirement"
+      },
+      "title": "Requirements",
+      "type": "array"
+    },
+    "messages": {
+      "items": {
+        "$ref": "#/$defs/Message"
+      },
+      "title": "Messages",
+      "type": "array"
+    },
+    "signals": {
+      "items": {
+        "$ref": "#/$defs/Signal"
+      },
+      "title": "Signals",
+      "type": "array"
+    },
+    "acronyms": {
+      "items": {
+        "$ref": "#/$defs/Acronym"
+      },
+      "title": "Acronyms",
+      "type": "array"
+    }
+  },
+  "required": [
+    "document_id"
+  ],
+  "title": "SemanticIcdIR",
+  "type": "object"
+}

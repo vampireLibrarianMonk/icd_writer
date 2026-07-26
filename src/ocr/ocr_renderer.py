@@ -125,8 +125,70 @@ def render_ocr_searchable(
     - Text is selectable and searchable (OCR layer on top)
     - Tables, TOC, appendix formatting all preserved pixel-perfect
     - Fonts appear exactly as they do in the scan
+
+    Text layer is precisely aligned to visual text positions using
+    width-matched font sizing and ascender-based baseline placement.
     """
-    return render_ocr_to_pdf(source_pdf, document_ir, output_path, text_layer_only=True)
+    import fitz as fitz_lib
+
+    source_pdf = Path(source_pdf)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    font = fitz_lib.Font("helv")
+    ASCENDER = font.ascender
+    TOTAL_HEIGHT_RATIO = font.ascender - font.descender
+
+    source_doc = fitz_lib.open(str(source_pdf))
+    output_doc = fitz_lib.open()
+
+    # Copy all source pages (preserves original image encoding)
+    output_doc.insert_pdf(source_doc)
+
+    for page_info in document_ir.pages:
+        page_idx = page_info.page_number - 1
+        if page_idx >= len(output_doc):
+            break
+
+        page = output_doc[page_idx]
+
+        for block in page_info.text_blocks:
+            text = block.text_verbatim.strip()
+            if not text:
+                continue
+
+            target_width = block.bbox.x1 - block.bbox.x0
+            target_height = block.bbox.y1 - block.bbox.y0
+
+            if target_width <= 0 or target_height <= 0:
+                continue
+
+            # Calculate font size to match OCR bbox width
+            width_at_1pt = font.text_length(text, fontsize=1)
+            if width_at_1pt <= 0:
+                continue
+            size_for_width = target_width / width_at_1pt
+
+            # Constrain by height
+            size_for_height = target_height / TOTAL_HEIGHT_RATIO
+            calc_size = min(size_for_width, size_for_height)
+
+            # Baseline: place top of text at bbox.y0
+            baseline_y = block.bbox.y0 + (ASCENDER * calc_size)
+
+            page.insert_text(
+                point=(block.bbox.x0, baseline_y),
+                text=text,
+                fontsize=calc_size,
+                fontname="helv",
+                render_mode=3,  # invisible
+            )
+
+    output_doc.save(str(output_path))
+    output_doc.close()
+    source_doc.close()
+
+    return output_path
 
 
 def detect_font_characteristics(

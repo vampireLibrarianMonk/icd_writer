@@ -53,7 +53,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/document/block/${blockId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ block_id: blockId, new_text: newText }),
+      body: JSON.stringify({ new_text: newText }),
     });
     return res.json();
   },

@@ -47,12 +47,21 @@ export function TableEditor() {
     if (!editingCell) return;
     const cell = tableData.data[editingCell.row][editingCell.col];
     if (cellText !== cell.text) {
-      // Update the cell locally for immediate feedback
+      // Update locally
       const newData = { ...tableData };
       newData.data = [...tableData.data];
       newData.data[editingCell.row] = [...newData.data[editingCell.row]];
       newData.data[editingCell.row][editingCell.col] = { ...cell, text: cellText };
       setTableData(newData as TableData);
+
+      // Try to persist via block edit if block_id exists
+      if (cell.block_id) {
+        await fetch(`http://localhost:8000/document/block/${cell.block_id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ new_text: cellText }),
+        });
+      }
     }
     setEditingCell(null);
   };

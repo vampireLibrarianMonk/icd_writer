@@ -389,7 +389,6 @@ def create_app() -> FastAPI:
     # ─── Editing ───────────────────────────────────────────────────
 
     class EditRequest(BaseModel):
-        block_id: str
         new_text: str
 
     @app.put("/document/block/{block_id}")

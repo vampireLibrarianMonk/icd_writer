@@ -97,36 +97,64 @@ def detect_rogue_text(
                     bg_color = img[cy, cx]
 
                     # Check: is text color very close to background?
-                    # White text (>200) on truly white background (>230) = rogue
+                    # White text (>200) on truly white background (>220) = rogue
                     text_bright = (text_r + text_g + text_b) / 3
                     bg_bright = bg_color.mean()
 
                     reason = None
-                    if text_bright > 200 and bg_bright > 230:
+                    if text_bright > 200 and bg_bright > 220:
                         reason = "white_on_light"
                     elif abs(text_bright - bg_bright) < 10 and text_bright > 150:
                         reason = "same_as_background"
 
                     if reason:
-                        # Find corresponding IR block
+                        # Find corresponding IR block (by position or text content)
+                        matched = False
                         for block in page_info.text_blocks:
-                            if (abs(block.bbox.x0 - bbox[0]) < 5 and
-                                    abs(block.bbox.y0 - bbox[1]) < 5):
-                                # Don't double-flag
+                            # Match by position proximity
+                            if (abs(block.bbox.x0 - bbox[0]) < 20 and
+                                    abs(block.bbox.y0 - bbox[1]) < 20):
                                 if not any(
-                                    rg.block_id == block.id for rg in rogues
+                                    rg.block_id == block.id and rg.text == text
+                                    for rg in rogues
                                 ):
                                     rogues.append(
                                         RogueText(
                                             page=page_info.page_number,
                                             block_id=block.id,
                                             text=text[:80],
-                                            bbox=block.bbox,
+                                            bbox=BoundingBox(
+                                                x0=bbox[0], y0=bbox[1],
+                                                x1=bbox[2], y1=bbox[3],
+                                            ),
                                             reason=reason,
                                             confidence=0.9,
                                         )
                                     )
+                                matched = True
                                 break
+                        if not matched:
+                            # Fallback: match by text content
+                            for block in page_info.text_blocks:
+                                if text in block.text_verbatim:
+                                    if not any(
+                                        rg.block_id == block.id and rg.text == text
+                                        for rg in rogues
+                                    ):
+                                        rogues.append(
+                                            RogueText(
+                                                page=page_info.page_number,
+                                                block_id=block.id,
+                                                text=text[:80],
+                                                bbox=BoundingBox(
+                                                    x0=bbox[0], y0=bbox[1],
+                                                    x1=bbox[2], y1=bbox[3],
+                                                ),
+                                                reason=reason,
+                                                confidence=0.9,
+                                            )
+                                        )
+                                    break
 
     doc.close()
     return rogues

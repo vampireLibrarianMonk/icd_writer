@@ -344,6 +344,13 @@ def create_app() -> FastAPI:
             doc.close()
             raise HTTPException(400, f"Invalid page: {page_number}")
 
+        page = doc[page_number - 1]
+        pix = page.get_pixmap(dpi=150)
+        img_bytes = pix.tobytes("png")
+        doc.close()
+
+        return Response(content=img_bytes, media_type="image/png")
+
     @app.get("/document/requirements")
     def get_requirements():
         """Extract and return all candidate requirements from the document."""

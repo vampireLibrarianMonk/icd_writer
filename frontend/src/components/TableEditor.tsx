@@ -16,6 +16,7 @@ interface TableData {
 export function TableEditor() {
   const currentPage = useEditorStore((s) => s.currentPage);
   const totalPages = useEditorStore((s) => s.totalPages);
+  const refreshTrigger = useEditorStore((s) => s.refreshTrigger);
   const [tableData, setTableData] = useState<TableData | null>(null);
   const [editingCell, setEditingCell] = useState<{ row: number; col: number } | null>(null);
   const [cellText, setCellText] = useState("");
@@ -31,7 +32,7 @@ export function TableEditor() {
         setTableData(data);
       })
       .catch(() => setTableData(null));
-  }, [currentPage, totalPages]);
+  }, [currentPage, totalPages, refreshTrigger]);
 
   if (!tableData || !tableData.has_table) {
     return null;

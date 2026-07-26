@@ -17,6 +17,7 @@ interface EditorState {
   // Session
   sessionId: string | null;
   editCount: number;
+  refreshTrigger: number;
 
   // Actions
   loadDocument: (path: string) => Promise<void>;
@@ -39,6 +40,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   editText: "",
   sessionId: null,
   editCount: 0,
+  refreshTrigger: 0,
 
   loadDocument: async (path: string) => {
     // Start session
@@ -108,6 +110,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           editCount: Math.max(0, state.editCount - 1),
           selectedBlock: null,
           editText: "",
+          refreshTrigger: state.refreshTrigger + 1,
         }));
       }
     } catch (e) {

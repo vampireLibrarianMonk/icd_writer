@@ -223,7 +223,7 @@ def extract_page_elements(pdf_path: Path | str, page_number: int) -> tuple[float
                 # border pixels from the source image before embedding. This prevents
                 # thick black bands where adjacent boxes overlap. The visual border
                 # is provided by the container rectangle strokes in the drawing layer.
-                if bbox.width < 100 and bbox.height < 60:
+                if bbox.width < 250 and bbox.height < 60:
                     from PIL import Image as PILImage
                     import io
                     try:

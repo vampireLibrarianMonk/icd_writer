@@ -200,6 +200,31 @@ def create_app() -> FastAPI:
 
     # ─── Editing ───────────────────────────────────────────────────
 
+
+    @app.get("/document/page/{page_number}/image")
+    def get_page_image(page_number: int):
+        """Render a page as PNG image for the viewer."""
+        import fitz
+        from fastapi.responses import Response
+
+        session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        doc = fitz.open(session.document_path)
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            raise HTTPException(400, f"Invalid page: {page_number}")
+
+        page = doc[page_number - 1]
+        pix = page.get_pixmap(dpi=150)
+        img_bytes = pix.tobytes("png")
+        doc.close()
+
+        return Response(content=img_bytes, media_type="image/png")
+
+    # ─── Editing ───────────────────────────────────────────────────
+
     class EditRequest(BaseModel):
         block_id: str
         new_text: str

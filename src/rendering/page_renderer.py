@@ -140,19 +140,24 @@ def extract_page_elements(pdf_path: Path | str, page_number: int) -> tuple[float
         if has_curves or len(items) > 1:
             # Build an SVG path from all items in this drawing
             path_parts = []
+            last_end = None  # track the endpoint of the previous segment
             for item in items:
                 if item[0] == "l":  # line segment
                     p1, p2 = item[1], item[2]
-                    if not path_parts:
+                    # Check if we need a new moveto (discontinuity)
+                    if last_end is None or abs(p1.x - last_end[0]) > 0.5 or abs(p1.y - last_end[1]) > 0.5:
                         path_parts.append(f"M {p1.x:.2f} {p1.y:.2f}")
                     path_parts.append(f"L {p2.x:.2f} {p2.y:.2f}")
+                    last_end = (p2.x, p2.y)
                 elif item[0] == "c":  # cubic bezier curve
                     p1, p2, p3, p4 = item[1], item[2], item[3], item[4]
-                    if not path_parts:
+                    # Check if we need a new moveto (discontinuity)
+                    if last_end is None or abs(p1.x - last_end[0]) > 0.5 or abs(p1.y - last_end[1]) > 0.5:
                         path_parts.append(f"M {p1.x:.2f} {p1.y:.2f}")
                     path_parts.append(
                         f"C {p2.x:.2f} {p2.y:.2f} {p3.x:.2f} {p3.y:.2f} {p4.x:.2f} {p4.y:.2f}"
                     )
+                    last_end = (p4.x, p4.y)
                 elif item[0] == "re":  # rectangle as part of a path
                     rect = item[1]
                     path_parts.append(f"M {rect.x0:.2f} {rect.y0:.2f}")
@@ -160,6 +165,7 @@ def extract_page_elements(pdf_path: Path | str, page_number: int) -> tuple[float
                     path_parts.append(f"L {rect.x1:.2f} {rect.y1:.2f}")
                     path_parts.append(f"L {rect.x0:.2f} {rect.y1:.2f}")
                     path_parts.append("Z")
+                    last_end = (rect.x0, rect.y0)
 
             if path_parts:
                 svg_path = " ".join(path_parts)

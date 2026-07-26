@@ -472,13 +472,19 @@ def create_app() -> FastAPI:
         if not action:
             raise HTTPException(400, "Nothing to undo")
 
-        # Restore old text
         old_text = action.data.get("old_text", "")
+        new_text = action.data.get("new_text", "")
         block_id = action.block_id
+
+        # Find the block and reverse the edit
         for page in doc_ir.pages:
             for block in page.text_blocks:
-                if block.id == block_id:
-                    block.text_verbatim = old_text
+                if block_id and block.id == block_id:
+                    # Replace new_text back to old_text within the block
+                    if new_text and new_text in block.text_verbatim:
+                        block.text_verbatim = block.text_verbatim.replace(new_text, old_text)
+                    else:
+                        block.text_verbatim = old_text
                     return {"status": "undone", "block_id": block_id, "restored_text": old_text}
 
         return {"status": "undone", "block_id": block_id}
@@ -496,12 +502,16 @@ def create_app() -> FastAPI:
             raise HTTPException(400, "Nothing to redo")
 
         # Re-apply new text
+        old_text = action.data.get("old_text", "")
         new_text = action.data.get("new_text", "")
         block_id = action.block_id
         for page in doc_ir.pages:
             for block in page.text_blocks:
-                if block.id == block_id:
-                    block.text_verbatim = new_text
+                if block_id and block.id == block_id:
+                    if old_text and old_text in block.text_verbatim:
+                        block.text_verbatim = block.text_verbatim.replace(old_text, new_text)
+                    else:
+                        block.text_verbatim = new_text
                     return {"status": "redone", "block_id": block_id, "applied_text": new_text}
 
         return {"status": "redone", "block_id": block_id}

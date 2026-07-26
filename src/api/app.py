@@ -20,6 +20,11 @@ from src.api.models_config import (
 from src.api.session import Action, ActionType, Session
 
 
+class EditRequest(BaseModel):
+    """Request body for editing a text block."""
+    new_text: str
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="ICD Writer",
@@ -387,9 +392,6 @@ def create_app() -> FastAPI:
         return Response(content=img_bytes, media_type="image/png")
 
     # ─── Editing ───────────────────────────────────────────────────
-
-    class EditRequest(BaseModel):
-        new_text: str
 
     @app.put("/document/block/{block_id}")
     def edit_block(block_id: str, req: EditRequest):

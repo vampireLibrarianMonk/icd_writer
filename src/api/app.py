@@ -87,6 +87,27 @@ def create_app() -> FastAPI:
 
     # ─── Document ──────────────────────────────────────────────────
 
+    @app.post("/document/upload")
+    async def upload_document(file: UploadFile):
+        """Upload a PDF file from the user's machine."""
+        import tempfile
+        import shutil
+
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(400, "File must be a PDF")
+
+        # Save to a temp location
+        upload_dir = Path("uploads")
+        upload_dir.mkdir(exist_ok=True)
+        save_path = upload_dir / file.filename
+
+        with open(save_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # Now open it via the normal pipeline
+        return {"saved_path": str(save_path), "filename": file.filename}
+
+
     @app.post("/document/open")
     def open_document(pdf_path: str):
         """Open a PDF and run the extraction pipeline."""
@@ -199,6 +220,113 @@ def create_app() -> FastAPI:
         }
 
     # ─── Editing ───────────────────────────────────────────────────
+
+    @app.get("/document/page/{page_number}/table")
+    def get_page_table(page_number: int):
+        """Detect and return table structure for a page.
+
+        Uses raw span-level extraction (finer than Document IR blocks)
+        to detect and present table structure.
+        """
+        import fitz
+
+        session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        doc = fitz.open(session.document_path)
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            raise HTTPException(400, f"Invalid page: {page_number}")
+
+        page = doc[page_number - 1]
+        page_height = page.rect.height
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        doc.close()
+
+        # Collect individual text spans with positions
+        # Exclude header/footer areas (top 70pt and bottom 60pt)
+        spans = []
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    text = "".join(c["c"] for c in chars).strip()
+                    if text:
+                        y0 = span["bbox"][1]
+                        # Skip header and footer regions
+                        if y0 < 70 or y0 > page_height - 60:
+                            continue
+                        spans.append({
+                            "text": text,
+                            "x0": span["bbox"][0],
+                            "y0": span["bbox"][1],
+                            "x1": span["bbox"][2],
+                            "y1": span["bbox"][3],
+                        })
+
+        if len(spans) < 6:
+            return {"has_table": False}
+
+        # Cluster x positions into columns (30pt tolerance)
+        x_values = [s["x0"] for s in spans]
+        columns = _cluster_positions(x_values, tolerance=30)
+
+        # Cluster y positions into rows (8pt tolerance)
+        y_values = [s["y0"] for s in spans]
+        rows = _cluster_positions(y_values, tolerance=8)
+
+        if len(columns) < 2 or len(rows) < 3:
+            return {"has_table": False}
+
+        # Build table grid
+        table_data = []
+        for row_y in rows:
+            row_cells = []
+            for col_x in columns:
+                cell_spans = [
+                    s for s in spans
+                    if abs(s["x0"] - col_x) < 30 and abs(s["y0"] - row_y) < 8
+                ]
+                cell_text = " ".join(s["text"] for s in cell_spans)
+                row_cells.append({"text": cell_text, "block_id": None})
+            table_data.append(row_cells)
+
+        # Filter empty rows
+        table_data = [row for row in table_data if any(c["text"] for c in row)]
+
+        if len(table_data) < 2:
+            return {"has_table": False}
+
+        return {
+            "has_table": True,
+            "columns": len(columns),
+            "rows": len(table_data),
+            "data": table_data,
+            "row_y_min": rows[0] if rows else 0,
+            "row_y_max": rows[-1] + 20 if rows else 0,
+        }
+
+    def _cluster_positions(values: list[float], tolerance: float) -> list[float]:
+        """Cluster nearby values into groups, return the median of each group."""
+        if not values:
+            return []
+        sorted_vals = sorted(values)
+        clusters: list[list[float]] = [[sorted_vals[0]]]
+        for v in sorted_vals[1:]:
+            if v - clusters[-1][-1] < tolerance:
+                clusters[-1].append(v)
+            else:
+                clusters.append([v])
+        return [
+            sorted(c)[len(c) // 2]
+            for c in clusters
+            if len(c) >= 2
+        ]
+
+
 
 
     @app.get("/document/page/{page_number}/image")

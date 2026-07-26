@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { api, TextBlock, PageData } from "../api/client";
+import { api } from "../api/client";
+import type { TextBlock, PageData } from "../api/client";
 
 interface EditorState {
   // Document state

@@ -23,6 +23,7 @@ env/
 Thumbs.db
 
 # Output artifacts
+archive/output/
 output/
 
 # Test cache
@@ -40,4 +41,5 @@ htmlcov/
 # Environment variables
 .env
 .env.local
+.kiro/
 .kiro/

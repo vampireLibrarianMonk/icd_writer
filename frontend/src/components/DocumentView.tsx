@@ -1,9 +1,33 @@
 import { useEditorStore } from "../store/editorStore";
-import { TextBlock } from "../api/client";
+import type { TextBlock } from "../api/client";
+import { useEffect, useState } from "react";
 
 export function DocumentView() {
   const { pageData, currentPage, totalPages, selectedBlock, goToPage, selectBlock } =
     useEditorStore();
+  const [hasTable, setHasTable] = useState(false);
+  const [tableYRange, setTableYRange] = useState<[number, number]>([0, 0]);
+
+  // Check if current page has a table and get its y-range
+  useEffect(() => {
+    if (!totalPages || !currentPage) return;
+    fetch(`http://localhost:8000/document/page/${currentPage}/table`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.has_table && data.data?.length > 0) {
+          setHasTable(true);
+          // Get the y-range of the table from row positions
+          if (data.row_y_min !== undefined) {
+            setTableYRange([data.row_y_min, data.row_y_max]);
+          } else {
+            setTableYRange([100, 400]); // fallback estimate
+          }
+        } else {
+          setHasTable(false);
+        }
+      })
+      .catch(() => setHasTable(false));
+  }, [currentPage, totalPages]);
 
   if (!pageData) {
     return (
@@ -13,7 +37,17 @@ export function DocumentView() {
     );
   }
 
-  const scale = 0.75; // render at 75% of actual point size
+  const scale = 0.75;
+  const pageImageUrl = `http://localhost:8000/document/page/${currentPage}/image`;
+
+  // Filter out blocks that are in the table area (let table editor handle those)
+  // Keep blocks outside the table y-range clickable
+  const visibleBlocks = hasTable
+    ? pageData.blocks.filter((b) => {
+        // Hide blocks whose y0 falls within the table region
+        return b.bbox.y0 < tableYRange[0] || b.bbox.y0 > tableYRange[1];
+      })
+    : pageData.blocks;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -24,20 +58,33 @@ export function DocumentView() {
         <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages}>▶</button>
       </div>
 
-      {/* Page canvas with text block overlays */}
+      {/* Page with image background and text block overlays */}
       <div style={{ flex: 1, overflow: "auto", padding: "16px", background: "#e8e8e8" }}>
         <div
           style={{
             position: "relative",
             width: `${pageData.width_pt * scale}px`,
             height: `${pageData.height_pt * scale}px`,
-            background: "white",
             margin: "0 auto",
             boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
           }}
         >
-          {/* Text blocks as clickable overlays */}
-          {pageData.blocks.map((block) => (
+          {/* Page image as background */}
+          <img
+            src={pageImageUrl}
+            alt={`Page ${currentPage}`}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+            }}
+            draggable={false}
+          />
+
+          {/* Text blocks as clickable overlays (disabled on table pages) */}
+          {visibleBlocks.map((block) => (
             <BlockOverlay
               key={block.id}
               block={block}
@@ -65,7 +112,6 @@ function BlockOverlay({
 }) {
   const width = (block.bbox.x1 - block.bbox.x0) * scale;
   const height = (block.bbox.y1 - block.bbox.y0) * scale;
-  const fontSize = Math.max(8, (block.font_size || 11) * scale);
 
   return (
     <div
@@ -80,29 +126,23 @@ function BlockOverlay({
           ? "2px solid #2196F3"
           : "1px solid transparent",
         background: isSelected
-          ? "rgba(33, 150, 243, 0.08)"
+          ? "rgba(33, 150, 243, 0.15)"
           : "transparent",
         cursor: "pointer",
-        overflow: "hidden",
-        fontSize: `${fontSize}px`,
-        lineHeight: `${height}px`,
-        whiteSpace: "nowrap",
-        color: "#000",
-        fontFamily: "serif",
       }}
       onMouseEnter={(e) => {
         if (!isSelected) {
+          (e.currentTarget as HTMLElement).style.background = "rgba(33, 150, 243, 0.05)";
           (e.currentTarget as HTMLElement).style.border = "1px solid #90CAF9";
         }
       }}
       onMouseLeave={(e) => {
         if (!isSelected) {
+          (e.currentTarget as HTMLElement).style.background = "transparent";
           (e.currentTarget as HTMLElement).style.border = "1px solid transparent";
         }
       }}
       title={block.text}
-    >
-      {block.text}
-    </div>
+    />
   );
 }

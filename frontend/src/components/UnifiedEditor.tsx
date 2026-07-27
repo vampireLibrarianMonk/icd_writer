@@ -20,11 +20,27 @@ export function UnifiedEditor({ width }: { width: number }) {
   const [selectedTableZone, setSelectedTableZone] = useState<{ yMin: number; yMax: number; label: string } | null>(null);
   const currentPage = useEditorStore((s) => s.currentPage);
 
+  // Element navigation state
+  const [allElements, setAllElements] = useState<ClickableElement[]>([]);
+  const [currentElementIdx, setCurrentElementIdx] = useState<number>(-1);
+
+  // Load all elements for this page (for navigation)
+  useEffect(() => {
+    if (!documentLoaded || !currentPage) return;
+    fetch(`http://localhost:8000/document/page/${currentPage}/elements`)
+      .then((r) => r.json())
+      .then((data) => {
+        setAllElements(data.elements || []);
+      })
+      .catch(() => setAllElements([]));
+  }, [currentPage, documentLoaded]);
+
   // Reset selection on page change
   useEffect(() => {
     setSelected(null);
     setEditText("");
     setSelectedTableZone(null);
+    setCurrentElementIdx(-1);
   }, [currentPage]);
 
   // Listen for element selection from page view
@@ -33,11 +49,17 @@ export function UnifiedEditor({ width }: { width: number }) {
       setSelected(e.detail);
       setEditText(e.detail.text);
       setSelectedTableZone(null);
+      // Find index in allElements
+      const idx = allElements.findIndex(
+        (el) => el.id === e.detail.id || (el.bbox.x0 === e.detail.bbox.x0 && el.bbox.y0 === e.detail.bbox.y0)
+      );
+      setCurrentElementIdx(idx);
     };
-    const deselect = () => { setSelected(null); setSelectedTableZone(null); };
+    const deselect = () => { setSelected(null); setSelectedTableZone(null); setCurrentElementIdx(-1); };
     const tableZone = (e: CustomEvent) => {
       setSelectedTableZone(e.detail);
       setSelected(null);
+      setCurrentElementIdx(-1);
     };
     window.addEventListener("element-selected" as any, handler);
     window.addEventListener("element-deselected" as any, deselect);
@@ -47,7 +69,24 @@ export function UnifiedEditor({ width }: { width: number }) {
       window.removeEventListener("element-deselected" as any, deselect);
       window.removeEventListener("table-zone-selected" as any, tableZone);
     };
-  }, []);
+  }, [allElements]);
+
+  // Navigate to prev/next element
+  const navigateElement = (direction: "prev" | "next") => {
+    if (allElements.length === 0) return;
+    let newIdx = currentElementIdx;
+    if (direction === "next") {
+      newIdx = currentElementIdx < allElements.length - 1 ? currentElementIdx + 1 : 0;
+    } else {
+      newIdx = currentElementIdx > 0 ? currentElementIdx - 1 : allElements.length - 1;
+    }
+    const elem = allElements[newIdx];
+    setSelected(elem);
+    setEditText(elem.text);
+    setCurrentElementIdx(newIdx);
+    // Also highlight it on the document view
+    window.dispatchEvent(new CustomEvent("element-selected", { detail: elem }));
+  };
 
   // Check page type
   useEffect(() => {
@@ -150,6 +189,34 @@ export function UnifiedEditor({ width }: { width: number }) {
           ← Back to TOC
         </button>
       )}
+      {/* Element navigation bar */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+        marginBottom: "8px",
+        padding: "4px 8px",
+        background: "var(--bg-secondary)",
+        borderRadius: "4px",
+        fontSize: "11px",
+      }}>
+        <button
+          onClick={() => navigateElement("prev")}
+          disabled={allElements.length === 0}
+          style={{ padding: "2px 6px", fontSize: "11px" }}
+          title="Previous element"
+        >◀</button>
+        <span style={{ fontWeight: 500 }}>
+          Element {currentElementIdx >= 0 ? currentElementIdx + 1 : "—"} of {allElements.length}
+        </span>
+        <button
+          onClick={() => navigateElement("next")}
+          disabled={allElements.length === 0}
+          style={{ padding: "2px 6px", fontSize: "11px" }}
+          title="Next element"
+        >▶</button>
+      </div>
+
       {/* Element label */}
       <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--accent)", marginBottom: "8px" }}>
         {selected.label}

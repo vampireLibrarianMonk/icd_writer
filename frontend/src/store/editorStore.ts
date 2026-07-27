@@ -62,6 +62,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       });
       // Load first page
       await get().goToPage(1);
+
+      // Notify if related versions exist
+      if (result.related_versions && result.related_versions.length > 0) {
+        window.dispatchEvent(new CustomEvent("related-versions-found", {
+          detail: { currentPath: path, relatedVersions: result.related_versions },
+        }));
+      }
     }
   },
 

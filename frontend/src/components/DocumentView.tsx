@@ -10,7 +10,7 @@ interface Overlay {
 }
 
 export function DocumentView() {
-  const { pageData, currentPage, totalPages, goToPage } = useEditorStore();
+  const { pageData, currentPage, totalPages, goToPage, documentPath } = useEditorStore();
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
@@ -58,6 +58,50 @@ export function DocumentView() {
     }).catch(() => setOverlays([]));
   }, [currentPage, totalPages]);
 
+  // Listen for TBD navigation: highlight matching element on current page
+  const [highlightText, setHighlightText] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      const { context } = e.detail;
+      // Store the context text to match against overlays
+      setHighlightText(context);
+    };
+    window.addEventListener("navigate-to-tbd" as any, handler);
+    return () => window.removeEventListener("navigate-to-tbd" as any, handler);
+  }, []);
+
+  // Once overlays load after navigation, find and highlight the matching one
+  useEffect(() => {
+    if (!highlightText || overlays.length === 0) return;
+
+    // Find the overlay whose text best matches the TBD context
+    const contextLower = highlightText.toLowerCase();
+    let bestIdx = -1;
+    let bestScore = 0;
+
+    for (let i = 0; i < overlays.length; i++) {
+      const ovText = overlays[i].text.toLowerCase();
+      // Check if context words appear in the overlay text
+      const contextWords = contextLower.split(/\s+/).filter(w => w.length > 3);
+      const matches = contextWords.filter(w => ovText.includes(w)).length;
+      const score = contextWords.length > 0 ? matches / contextWords.length : 0;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+
+    if (bestIdx >= 0 && bestScore > 0.3) {
+      setSelectedIdx(bestIdx);
+      // Also dispatch element-selected so the editor panel shows it
+      window.dispatchEvent(new CustomEvent("element-selected", { detail: overlays[bestIdx] }));
+    }
+
+    // Clear highlight text after matching
+    setHighlightText(null);
+  }, [overlays, highlightText]);
+
   const handleClick = (idx: number) => {
     setSelectedIdx(idx);
     const elem = overlays[idx] as any;
@@ -85,6 +129,10 @@ export function DocumentView() {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-secondary)" }}>
+        <span style={{ fontSize: "12px", fontWeight: 500, marginRight: "8px", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={documentPath}>
+          {documentPath.split("/").pop()}
+        </span>
+        <span style={{ borderLeft: "1px solid #ccc", height: "16px" }} />
         <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}>◀</button>
         <span>Page {currentPage} / {totalPages}</span>
         <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages}>▶</button>

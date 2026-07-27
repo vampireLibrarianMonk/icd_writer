@@ -1,11 +1,33 @@
 import { useEditorStore } from "../store/editorStore";
 import { api } from "../api/client";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
+
+interface DocInfo {
+  path: string;
+  filename: string;
+  stem: string;
+  indexed: boolean;
+}
 
 export function Toolbar() {
-  const { documentLoaded, editCount, undo, redo, canUndo, canRedo } = useEditorStore();
+  const { documentLoaded, editCount, undo, redo, canUndo, canRedo, documentPath } = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [darkMode, setDarkMode] = useState(false);
+  const [availableDocs, setAvailableDocs] = useState<DocInfo[]>([]);
+
+  // Load available documents on mount
+  useEffect(() => {
+    api.listDocuments().then((res) => {
+      setAvailableDocs(res.documents || []);
+    }).catch(() => {});
+  }, []);
+
+  const handleDocSwitch = async (path: string) => {
+    if (path === documentPath) return;
+    await useEditorStore.getState().loadDocument(path);
+    // Refresh available docs (indexed status may change)
+    api.listDocuments().then((res) => setAvailableDocs(res.documents || []));
+  };
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -64,6 +86,10 @@ export function Toolbar() {
       borderBottom: "1px solid var(--border)",
       background: "var(--bg-secondary)",
     }}>
+      <button onClick={toggleDarkMode} title="Toggle dark/light mode">
+        {darkMode ? "☀️" : "🌙"}
+      </button>
+      <span style={{ borderLeft: "1px solid #ccc", height: "20px", margin: "0 8px" }} />
       <input
         ref={fileInputRef}
         type="file"
@@ -72,6 +98,29 @@ export function Toolbar() {
         onChange={handleFileSelected}
       />
       <button onClick={handleOpen}>Open</button>
+      {availableDocs.length > 0 && (
+        <select
+          value={documentPath || ""}
+          onChange={(e) => e.target.value && handleDocSwitch(e.target.value)}
+          style={{
+            fontSize: "12px",
+            padding: "4px 6px",
+            borderRadius: "4px",
+            border: "1px solid var(--border)",
+            maxWidth: "180px",
+            background: "var(--bg-primary)",
+            color: "var(--text-primary)",
+          }}
+          title="Switch between indexed documents"
+        >
+          <option value="">— Select Document —</option>
+          {availableDocs.map((doc) => (
+            <option key={doc.path} value={doc.path}>
+              {doc.indexed ? "●" : "○"} {doc.filename}
+            </option>
+          ))}
+        </select>
+      )}
       <button onClick={handleSave} disabled={!documentLoaded}>Save</button>
       <button onClick={handleExport} disabled={!documentLoaded}>Export PDF</button>
       <span style={{ borderLeft: "1px solid #ccc", height: "20px", margin: "0 8px" }} />
@@ -84,9 +133,6 @@ export function Toolbar() {
         </span>
       )}
       <span style={{ flex: 1 }} />
-      <button onClick={toggleDarkMode} title="Toggle dark/light mode">
-        {darkMode ? "☀️" : "🌙"}
-      </button>
     </div>
   );
 }

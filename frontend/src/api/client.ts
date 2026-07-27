@@ -88,4 +88,71 @@ export const api = {
   getPageImageUrl(pageNumber: number): string {
     return `${API_BASE}/document/page/${pageNumber}/image`;
   },
+
+  // ─── Search & RAG ──────────────────────────────────────────
+
+  async listDocuments(): Promise<any> {
+    const res = await fetch(`${API_BASE}/documents`);
+    return res.json();
+  },
+
+  async getDocumentFamilies(): Promise<any> {
+    const res = await fetch(`${API_BASE}/documents/families`);
+    return res.json();
+  },
+
+  async getRelatedVersions(pdfPath: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/documents/related?pdf_path=${encodeURIComponent(pdfPath)}`);
+    return res.json();
+  },
+
+  async runVersionDiff(versionA: string, versionB: string, format: string = "markdown"): Promise<any> {
+    const params = new URLSearchParams({ version_a: versionA, version_b: versionB, format });
+    const res = await fetch(`${API_BASE}/documents/diff?${params}`, { method: "POST" });
+    return res.json();
+  },
+
+  async summarizeDiffSection(versionA: string, versionB: string, sectionHeading: string): Promise<any> {
+    const params = new URLSearchParams({ version_a: versionA, version_b: versionB, section_heading: sectionHeading });
+    const res = await fetch(`${API_BASE}/documents/diff/summarize?${params}`, { method: "POST" });
+    return res.json();
+  },
+
+  async search(query: string, k: number = 10, mode: string = "rrf", rag: boolean = false): Promise<any> {
+    const params = new URLSearchParams({
+      query,
+      k: String(k),
+      mode,
+      rag: String(rag),
+    });
+    const res = await fetch(`${API_BASE}/search?${params}`, { method: "POST" });
+    return res.json();
+  },
+
+  // ─── TBD Dashboard ─────────────────────────────────────────
+
+  async getTbdDashboard(filters?: { status?: string; item_type?: string; document?: string }): Promise<any> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.item_type) params.set("item_type", filters.item_type);
+    if (filters?.document) params.set("document", filters.document);
+    const res = await fetch(`${API_BASE}/tbd-dashboard?${params}`);
+    return res.json();
+  },
+
+  async ingestTbdDocuments(): Promise<any> {
+    const res = await fetch(`${API_BASE}/tbd-dashboard/ingest`, { method: "POST" });
+    return res.json();
+  },
+
+  async updateTbdItem(itemId: string, updates: { status?: string; owner?: string; resolution_value?: string }): Promise<any> {
+    const params = new URLSearchParams();
+    if (updates.status) params.set("status", updates.status);
+    if (updates.owner) params.set("owner", updates.owner);
+    if (updates.resolution_value) params.set("resolution_value", updates.resolution_value);
+    const res = await fetch(`${API_BASE}/tbd-dashboard/item/${encodeURIComponent(itemId)}?${params}`, {
+      method: "PUT",
+    });
+    return res.json();
+  },
 };

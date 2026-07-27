@@ -1,33 +1,37 @@
 import { useEditorStore } from "../store/editorStore";
-import type { TextBlock } from "../api/client";
 import { useEffect, useState } from "react";
 
-export function DocumentView() {
-  const { pageData, currentPage, totalPages, selectedBlock, goToPage, selectBlock } =
-    useEditorStore();
-  const [hasTable, setHasTable] = useState(false);
-  const [tableYRange, setTableYRange] = useState<[number, number]>([0, 0]);
+interface Overlay {
+  type: "header" | "footer" | "table_cell" | "text_block";
+  label: string;
+  text: string;
+  id: string | null;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+}
 
-  // Check if current page has a table and get its y-range
+export function DocumentView() {
+  const { pageData, currentPage, totalPages, goToPage } = useEditorStore();
+  const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
+  // Load all clickable overlays for this page (fine-grained spans)
   useEffect(() => {
     if (!totalPages || !currentPage) return;
-    fetch(`http://localhost:8000/document/page/${currentPage}/table`)
-      .then((res) => res.json())
+
+    fetch(`http://localhost:8000/document/page/${currentPage}/elements`)
+      .then((r) => r.json())
       .then((data) => {
-        if (data.has_table && data.data?.length > 0) {
-          setHasTable(true);
-          // Get the y-range of the table from row positions
-          if (data.row_y_min !== undefined) {
-            setTableYRange([data.row_y_min, data.row_y_max]);
-          } else {
-            setTableYRange([100, 400]); // fallback estimate
-          }
-        } else {
-          setHasTable(false);
-        }
+        setOverlays(data.elements || []);
+        setSelectedIdx(null);
       })
-      .catch(() => setHasTable(false));
+      .catch(() => setOverlays([]));
   }, [currentPage, totalPages]);
+
+  const handleClick = (idx: number) => {
+    setSelectedIdx(idx);
+    const elem = overlays[idx];
+    window.dispatchEvent(new CustomEvent("element-selected", { detail: elem }));
+  };
 
   if (!pageData) {
     return (
@@ -40,25 +44,14 @@ export function DocumentView() {
   const scale = 0.75;
   const pageImageUrl = `http://localhost:8000/document/page/${currentPage}/image`;
 
-  // Filter out blocks that are in the table area (let table editor handle those)
-  // Keep blocks outside the table y-range clickable
-  const visibleBlocks = hasTable
-    ? pageData.blocks.filter((b) => {
-        // Hide blocks whose y0 falls within the table region
-        return b.bbox.y0 < tableYRange[0] || b.bbox.y0 > tableYRange[1];
-      })
-    : pageData.blocks;
-
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Page navigation */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-secondary)" }}>
         <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}>◀</button>
         <span>Page {currentPage} / {totalPages}</span>
         <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages}>▶</button>
       </div>
 
-      {/* Page with image background and text block overlays */}
       <div style={{ flex: 1, overflow: "auto", padding: "16px", background: "var(--bg-canvas)" }}>
         <div
           style={{
@@ -66,83 +59,51 @@ export function DocumentView() {
             width: `${pageData.width_pt * scale}px`,
             height: `${pageData.height_pt * scale}px`,
             margin: "0 auto",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            boxShadow: `0 2px 8px var(--shadow)`,
           }}
         >
-          {/* Page image as background */}
           <img
             src={pageImageUrl}
             alt={`Page ${currentPage}`}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-            }}
+            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
             draggable={false}
           />
 
-          {/* Text blocks as clickable overlays (disabled on table pages) */}
-          {visibleBlocks.map((block) => (
-            <BlockOverlay
-              key={block.id}
-              block={block}
-              scale={scale}
-              isSelected={selectedBlock?.id === block.id}
-              onClick={() => selectBlock(block)}
+          {overlays.map((ov, idx) => (
+            <div
+              key={idx}
+              onClick={() => handleClick(idx)}
+              style={{
+                position: "absolute",
+                left: `${ov.bbox.x0 * scale}px`,
+                top: `${ov.bbox.y0 * scale}px`,
+                width: `${(ov.bbox.x1 - ov.bbox.x0) * scale}px`,
+                height: `${(ov.bbox.y1 - ov.bbox.y0) * scale}px`,
+                border: selectedIdx === idx
+                  ? "2px solid var(--accent)"
+                  : "1px solid transparent",
+                background: selectedIdx === idx
+                  ? "var(--accent-light)"
+                  : "transparent",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                if (selectedIdx !== idx) {
+                  (e.currentTarget as HTMLElement).style.border = "1px solid var(--accent)";
+                  (e.currentTarget as HTMLElement).style.background = "rgba(33,150,243,0.04)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (selectedIdx !== idx) {
+                  (e.currentTarget as HTMLElement).style.border = "1px solid transparent";
+                  (e.currentTarget as HTMLElement).style.background = "transparent";
+                }
+              }}
+              title={`${ov.label}: ${ov.text.slice(0, 40)}`}
             />
           ))}
         </div>
       </div>
     </div>
-  );
-}
-
-function BlockOverlay({
-  block,
-  scale,
-  isSelected,
-  onClick,
-}: {
-  block: TextBlock;
-  scale: number;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  const width = (block.bbox.x1 - block.bbox.x0) * scale;
-  const height = (block.bbox.y1 - block.bbox.y0) * scale;
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        position: "absolute",
-        left: `${block.bbox.x0 * scale}px`,
-        top: `${block.bbox.y0 * scale}px`,
-        width: `${width}px`,
-        height: `${height}px`,
-        border: isSelected
-          ? "2px solid #2196F3"
-          : "1px solid transparent",
-        background: isSelected
-          ? "rgba(33, 150, 243, 0.15)"
-          : "transparent",
-        cursor: "pointer",
-      }}
-      onMouseEnter={(e) => {
-        if (!isSelected) {
-          (e.currentTarget as HTMLElement).style.background = "rgba(33, 150, 243, 0.05)";
-          (e.currentTarget as HTMLElement).style.border = "1px solid #90CAF9";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isSelected) {
-          (e.currentTarget as HTMLElement).style.background = "transparent";
-          (e.currentTarget as HTMLElement).style.border = "1px solid transparent";
-        }
-      }}
-      title={block.text}
-    />
   );
 }

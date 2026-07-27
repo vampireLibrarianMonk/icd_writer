@@ -370,6 +370,88 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "No document loaded")
         return analyze_page_content(session.document_path, page_number)
 
+    @app.get("/document/page/{page_number}/elements")
+    def get_page_elements(page_number: int):
+        """Return all clickable elements on a page with bboxes and labels.
+
+        Provides fine-grained spans for headers/footers (not merged blocks),
+        table cells, and body text blocks — each independently clickable.
+        """
+        import fitz
+
+        session = state["session"]
+        doc_ir = state["document_ir"]
+        if not session or not session.document_path or not doc_ir:
+            raise HTTPException(404, "No document loaded")
+
+        doc = fitz.open(session.document_path)
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            raise HTTPException(400, f"Invalid page: {page_number}")
+
+        page = doc[page_number - 1]
+        page_width = page.rect.width
+        page_height = page.rect.height
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        doc.close()
+
+        elements = []
+
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    text = "".join(c["c"] for c in chars).strip()
+                    if not text:
+                        continue
+
+                    bbox = {
+                        "x0": span["bbox"][0],
+                        "y0": span["bbox"][1],
+                        "x1": span["bbox"][2],
+                        "y1": span["bbox"][3],
+                    }
+                    y = span["bbox"][1]
+                    x = span["bbox"][0]
+
+                    # Classify
+                    if y < 60:
+                        align = "left" if x < page_width * 0.33 else "right" if x > page_width * 0.55 else "center"
+                        elem_type = "header"
+                        label = f"Header ({align})"
+                    elif y > page_height - 72:
+                        align = "left" if x < page_width * 0.33 else "right" if x > page_width * 0.55 else "center"
+                        elem_type = "footer"
+                        label = f"Footer ({align})"
+                    else:
+                        elem_type = "text_block"
+                        size = span.get("size", 11)
+                        if size > 13:
+                            label = "Heading"
+                        else:
+                            label = "Text"
+
+                    # Find matching IR block for id
+                    block_id = None
+                    page_ir = doc_ir.pages[page_number - 1]
+                    for ir_block in page_ir.text_blocks:
+                        if text in ir_block.text_verbatim and abs(ir_block.bbox.y0 - y) < 20:
+                            block_id = ir_block.id
+                            break
+
+                    elements.append({
+                        "type": elem_type,
+                        "label": label,
+                        "text": text,
+                        "id": block_id,
+                        "bbox": bbox,
+                    })
+
+        return {"page_number": page_number, "elements": elements}
+
+
     @app.get("/document/page/{page_number}/header-footer")
     def get_header_footer(page_number: int):
         """Return individual header and footer elements for editing.

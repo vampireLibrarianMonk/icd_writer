@@ -372,10 +372,11 @@ def create_app() -> FastAPI:
 
     @app.get("/document/page/{page_number}/table-zones")
     def get_table_zones(page_number: int):
-        """Return actual table bounding boxes from drawing clusters.
+        """Return table bounding boxes using grid density detection.
 
-        More accurate than text-based table detection — uses grid lines
-        (filled rectangles) to find table regions.
+        Counts thin rectangles (table grid lines) per vertical band.
+        Bands with 3+ thin rects are table bands. Consecutive table bands
+        (within 120pt gap) form a zone.
         """
         import fitz
 
@@ -395,28 +396,39 @@ def create_app() -> FastAPI:
         if len(drawings) < 10:
             return {"zones": []}
 
-        # Get y positions from all drawings
-        draw_ys = sorted(set(
-            [int(d.get("rect").y0) for d in drawings if d.get("rect")]
-            + [int(d.get("rect").y1) for d in drawings if d.get("rect")]
-        ))
+        # Count thin rectangles per 15pt band
+        band_size = 15
+        bands: dict[int, int] = {}
+        for d in drawings:
+            rect = d.get("rect")
+            if not rect:
+                continue
+            w = rect.width
+            h = rect.height
+            # Thin rect = grid line (thin in one dimension, substantial in other)
+            is_thin = (w < 3 or h < 3) and (w > 5 or h > 5)
+            if is_thin:
+                band = int(rect.y0 / band_size) * band_size
+                bands[band] = bands.get(band, 0) + 1
 
-        if not draw_ys:
+        # Find bands with table-like density
+        threshold = 3
+        table_bands = sorted([y for y, c in bands.items() if c >= threshold])
+
+        if not table_bands:
             return {"zones": []}
 
-        # Cluster into groups separated by gaps > 40pt
-        zones_raw = [[draw_ys[0]]]
-        for y in draw_ys[1:]:
-            if y - zones_raw[-1][-1] > 40:
-                zones_raw.append([y])
+        # Cluster into zones (allow 120pt gap between bands)
+        zones_raw = [[table_bands[0]]]
+        for b in table_bands[1:]:
+            if b - zones_raw[-1][-1] <= 120:
+                zones_raw[-1].append(b)
             else:
-                zones_raw[-1].append(y)
+                zones_raw.append([b])
 
-        # Filter to actual tables (height > 30pt, not header/footer rules)
         zones = [
-            {"y_min": min(z), "y_max": max(z)}
+            {"y_min": min(z), "y_max": max(z) + band_size}
             for z in zones_raw
-            if max(z) - min(z) > 30
         ]
 
         return {"zones": zones}

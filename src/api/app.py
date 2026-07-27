@@ -522,7 +522,7 @@ def create_app() -> FastAPI:
                 # Numbered list or section: starts with "N." or "N) " or "N.N."
                 first_text = line[0]["text"].strip()
                 is_list_item = bool(re.match(r"^\d+[\.\)]\s", first_text))
-                is_section = bool(re.match(r"^\d+\.\d+", first_text))
+                is_section = bool(re.match(r"^[1-9]\d*\.\d+", first_text))
 
                 # Break paragraph on any of:
                 # - Large vertical gap
@@ -542,7 +542,7 @@ def create_app() -> FastAPI:
         for para in paragraphs:
             if len(para) > 1:
                 first_text = para[0][0]["text"].strip()
-                if re.match(r"^\d+[\.\)]\s*$", first_text) or re.match(r"^\d+\.\d+", first_text):
+                if re.match(r"^\d+[\.\)]\s*$", first_text) or re.match(r"^[1-9]\d*\.\d+", first_text):
                     # Section header line is standalone
                     final_paragraphs.append([para[0]])
                     if len(para) > 1:
@@ -569,7 +569,7 @@ def create_app() -> FastAPI:
 
             # Section numbers are headings regardless of size
             first_text = all_spans[0]["text"].strip()
-            if re.match(r"^\d+[\.\)]\s", first_text) or re.match(r"^\d+\.\d+", first_text):
+            if re.match(r"^\d+[\.\)]\s", first_text) or re.match(r"^[1-9]\d*\.\d+", first_text):
                 label = "Heading"
 
             # Find matching IR block

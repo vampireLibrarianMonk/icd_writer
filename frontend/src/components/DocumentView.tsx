@@ -18,13 +18,18 @@ export function DocumentView() {
   useEffect(() => {
     if (!totalPages || !currentPage) return;
 
-    fetch(`http://localhost:8000/document/page/${currentPage}/elements`)
-      .then((r) => r.json())
-      .then((data) => {
-        setOverlays(data.elements || []);
-        setSelectedIdx(null);
-      })
-      .catch(() => setOverlays([]));
+    Promise.all([
+      fetch(`http://localhost:8000/document/page/${currentPage}/elements`).then((r) => r.json()),
+      fetch(`http://localhost:8000/document/page/${currentPage}/toc`).then((r) => r.json()),
+    ]).then(([elemData, tocData]) => {
+      let elems = elemData.elements || [];
+      // On TOC pages, only show header/footer overlays (body edited via TOC editor)
+      if (tocData.is_toc) {
+        elems = elems.filter((e: Overlay) => e.type === "header" || e.type === "footer");
+      }
+      setOverlays(elems);
+      setSelectedIdx(null);
+    }).catch(() => setOverlays([]));
   }, [currentPage, totalPages]);
 
   const handleClick = (idx: number) => {

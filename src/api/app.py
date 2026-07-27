@@ -379,8 +379,9 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "File not found")
         return FileResponse(
             str(file_path),
-            media_type="application/pdf",
+            media_type="application/octet-stream",
             filename=file_path.name,
+            headers={"Content-Disposition": f"attachment; filename={file_path.name}"},
         )
 
         if not session or not session.document_path:

@@ -451,6 +451,118 @@ def create_app() -> FastAPI:
 
         return {"page_number": page_number, "elements": elements}
 
+    @app.get("/document/page/{page_number}/toc")
+    def get_toc(page_number: int):
+        """Parse a Table of Contents page into title/page-number pairs.
+
+        Strips leader dots and separates section titles from page numbers.
+        """
+        import fitz
+        import re
+
+        session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        doc = fitz.open(session.document_path)
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            raise HTTPException(400, f"Invalid page: {page_number}")
+
+        page = doc[page_number - 1]
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        doc.close()
+
+        entries = []
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    text = "".join(c["c"] for c in chars).strip()
+                    if not text:
+                        continue
+
+                    y = span["bbox"][1]
+                    if y < 60 or y > 700:
+                        continue
+
+                    # Skip the "Table of Contents" title itself
+                    if "table of contents" in text.lower():
+                        continue
+
+                    # Check if this span has leader dots
+                    if text.count(".") > 5:
+                        # Parse: "Section Title.............page_num"
+                        # Split at the dot sequence
+                        match = re.match(r"^(.+?)\.{3,}\s*(\d+)?\s*$", text)
+                        if match:
+                            title = match.group(1).strip()
+                            page_num = match.group(2) or ""
+                            entries.append({
+                                "title": title,
+                                "page_ref": page_num,
+                                "y": y,
+                                "indent": span["bbox"][0] - 90,  # indent level
+                            })
+                        else:
+                            # Dots but no page number parse — might end with dots
+                            title = re.sub(r"\.{3,}\s*$", "", text).strip()
+                            if title:
+                                entries.append({
+                                    "title": title,
+                                    "page_ref": "",
+                                    "y": y,
+                                    "indent": span["bbox"][0] - 90,
+                                })
+                    else:
+                        # Non-dot span — could be section number or standalone page ref
+                        # Check if it's just a number (page reference at end of line)
+                        if re.match(r"^\d+$", text):
+                            # Page number — attach to previous entry
+                            if entries:
+                                entries[-1]["page_ref"] = text
+                        elif re.match(r"^\d+\.", text):
+                            # Section number like "1." or "3." — attach to next
+                            entries.append({
+                                "title": text,
+                                "page_ref": "",
+                                "y": y,
+                                "indent": span["bbox"][0] - 90,
+                                "is_number_prefix": True,
+                            })
+                        elif len(text) > 3:
+                            entries.append({
+                                "title": text,
+                                "page_ref": "",
+                                "y": y,
+                                "indent": span["bbox"][0] - 90,
+                            })
+
+        # Merge section number prefixes with their following title
+        merged = []
+        skip_next = False
+        for i, entry in enumerate(entries):
+            if skip_next:
+                skip_next = False
+                continue
+            if entry.get("is_number_prefix") and i + 1 < len(entries):
+                next_entry = entries[i + 1]
+                merged.append({
+                    "title": entry["title"] + " " + next_entry["title"],
+                    "page_ref": next_entry["page_ref"] or entry["page_ref"],
+                    "y": entry["y"],
+                    "indent": entry["indent"],
+                })
+                skip_next = True
+            else:
+                if "is_number_prefix" in entry:
+                    del entry["is_number_prefix"]
+                merged.append(entry)
+
+        return {"is_toc": len(merged) >= 3, "entries": merged}
+
 
     @app.get("/document/page/{page_number}/header-footer")
     def get_header_footer(page_number: int):

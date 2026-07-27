@@ -1,5 +1,6 @@
 import { useEditorStore } from "../store/editorStore";
 import { useState, useEffect } from "react";
+import { TocEditor } from "./TocEditor";
 
 interface ClickableElement {
   type: "header" | "footer" | "table_cell" | "text_block";
@@ -13,6 +14,7 @@ export function UnifiedEditor({ width }: { width: number }) {
   const { documentLoaded } = useEditorStore();
   const [selected, setSelected] = useState<ClickableElement | null>(null);
   const [editText, setEditText] = useState("");
+  const [isTocPage, setIsTocPage] = useState(false);
   const currentPage = useEditorStore((s) => s.currentPage);
 
   // Reset selection on page change
@@ -21,7 +23,7 @@ export function UnifiedEditor({ width }: { width: number }) {
     setEditText("");
   }, [currentPage]);
 
-  // This gets called from DocumentView when user clicks an overlay
+  // Listen for element selection from page view
   useEffect(() => {
     const handler = (e: CustomEvent<ClickableElement>) => {
       setSelected(e.detail);
@@ -31,10 +33,25 @@ export function UnifiedEditor({ width }: { width: number }) {
     return () => window.removeEventListener("element-selected" as any, handler);
   }, []);
 
+  // Listen for TOC detection
+  useEffect(() => {
+    const handler = (e: CustomEvent<boolean>) => setIsTocPage(e.detail);
+    window.addEventListener("toc-active" as any, handler);
+    return () => window.removeEventListener("toc-active" as any, handler);
+  }, []);
+
   if (!documentLoaded) {
     return (
       <div style={{ width: `${width}px`, padding: "16px", color: "var(--text-muted)", background: "var(--bg-panel)" }}>
         Open a document to begin.
+      </div>
+    );
+  }
+
+  if (isTocPage) {
+    return (
+      <div style={{ width: `${width}px`, position: "relative", background: "var(--bg-panel)", overflow: "auto" }}>
+        <TocEditor />
       </div>
     );
   }

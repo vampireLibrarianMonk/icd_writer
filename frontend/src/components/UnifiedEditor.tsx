@@ -33,12 +33,14 @@ export function UnifiedEditor({ width }: { width: number }) {
     return () => window.removeEventListener("element-selected" as any, handler);
   }, []);
 
-  // Listen for TOC detection
+  // Check if current page is TOC via page analysis
   useEffect(() => {
-    const handler = (e: CustomEvent<boolean>) => setIsTocPage(e.detail);
-    window.addEventListener("toc-active" as any, handler);
-    return () => window.removeEventListener("toc-active" as any, handler);
-  }, []);
+    if (!documentLoaded || !currentPage) return;
+    fetch(`http://localhost:8000/document/page/${currentPage}/analysis`)
+      .then((r) => r.json())
+      .then((data) => setIsTocPage(data.page_type === "table_of_contents"))
+      .catch(() => setIsTocPage(false));
+  }, [currentPage, documentLoaded]);
 
   if (!documentLoaded) {
     return (

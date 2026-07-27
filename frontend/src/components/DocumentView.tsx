@@ -20,11 +20,11 @@ export function DocumentView() {
 
     Promise.all([
       fetch(`http://localhost:8000/document/page/${currentPage}/elements`).then((r) => r.json()),
-      fetch(`http://localhost:8000/document/page/${currentPage}/toc`).then((r) => r.json()),
-    ]).then(([elemData, tocData]) => {
+      fetch(`http://localhost:8000/document/page/${currentPage}/analysis`).then((r) => r.json()),
+    ]).then(([elemData, analysis]) => {
       let elems = elemData.elements || [];
       // On TOC pages, only show header/footer overlays (body edited via TOC editor)
-      if (tocData.is_toc) {
+      if (analysis.page_type === "table_of_contents") {
         elems = elems.filter((e: Overlay) => e.type === "header" || e.type === "footer");
       }
       setOverlays(elems);

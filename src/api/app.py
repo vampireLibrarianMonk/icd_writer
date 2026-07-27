@@ -485,8 +485,8 @@ def create_app() -> FastAPI:
                     table_y_min = row_clusters[0]
                     table_y_max = row_clusters[-1] + 20
 
-            # Filter body_spans to only those OUTSIDE the table region
-            body_spans = [s for s in body_spans if s["y0"] > table_y_max or s["y1"] < table_y_min]
+            # Don't filter body_spans — show all elements, let frontend handle visibility
+            pass
 
         if not body_spans:
             return {"page_number": page_number, "elements": elements}

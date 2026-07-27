@@ -92,22 +92,56 @@ Tested against `icds/20150010976.pdf` (NASA LVC ICD, 35 pages):
 ```
 src/
 ├── models/              # Pydantic data models (Document IR, ICD IR)
-│   ├── common.py        # BoundingBox, Provenance, DocumentMetadata
-│   ├── document_ir.py   # Physical layout: pages, blocks, tables, figures
-│   └── icd_ir.py        # Engineering meaning: requirements, interfaces, signals
 ├── ingestion/           # PDF reading, hashing, metadata extraction
 ├── classification/      # Page content classification
 ├── extraction/          # Text block extraction with coordinates
 ├── rendering/           # PDF regeneration via HTML/CSS/WeasyPrint
-│   └── page_renderer.py # Core rendering engine
+│   ├── elements.py      # Renderable element models
+│   ├── extract.py       # PDF element extraction
+│   ├── renderer.py      # HTML generation and PDF output
+│   └── ir_renderer.py   # Render from edited Document IR
+├── ocr/                 # OCR pipeline for scanned PDFs
+│   ├── pipeline.py      # Orchestrator (Textract + Rekognition + Bedrock)
+│   ├── textract_client.py
+│   ├── rekognition_client.py
+│   ├── bedrock_client.py
+│   ├── ensemble.py      # Multi-model merge and conflict resolution
+│   ├── ocr_renderer.py  # Searchable PDF generation
+│   └── cost_tracker.py  # Per-call cost tracking
+├── api/                 # FastAPI backend for the editor UI
+│   ├── app.py           # REST endpoints
+│   ├── session.py       # Action journal (undo/redo, audit trail)
+│   └── models_config.py # Model selection and pricing
 ├── pipeline.py          # Extraction orchestrator
 ├── serialization.py     # YAML/JSON import/export
+├── report.py            # Visual fidelity report generator
+├── text_report.py       # Text accuracy report
+├── requirements.py      # Requirement extraction (shall/must detection)
+├── rogue_text.py        # Hidden text detection (z-order aware)
+├── structure.py         # Header/footer detection, change tracking
+├── page_analysis.py     # Page content type classification
+├── output_dir.py        # Structured output directory management
 └── cli.py              # Command-line interface
 
-schemas/                 # Auto-generated JSON Schema from models
+frontend/                # React + TypeScript + Vite
+├── src/
+│   ├── components/      # UI components
+│   │   ├── DocumentView.tsx   # PDF page viewer with clickable overlays
+│   │   ├── UnifiedEditor.tsx  # Click-to-edit panel
+│   │   ├── TableEditor.tsx    # Grid editor for tables
+│   │   ├── TocEditor.tsx      # Table of contents editor
+│   │   ├── Toolbar.tsx        # Open, Save, Export, Undo, Redo, Dark mode
+│   │   └── StatusBar.tsx
+│   ├── store/           # Zustand state management
+│   └── api/             # Backend API client
+
+schemas/                 # Auto-generated JSON Schema
 tests/
-├── unit/               # Model and utility tests
-└── integration/        # Full pipeline tests against sample PDFs
+├── unit/               # Model tests
+├── integration/        # Pipeline + text accuracy tests
+└── results/            # Visual fidelity and OCR results per document
+
+docs/                   # Requirements, design specs, known issues
 ```
 
 ## Technology Stack
@@ -118,7 +152,10 @@ tests/
 - **Pydantic** — data models, validation, serialization
 - **PyYAML** — canonical intermediate format
 - **NumPy/Pillow** — visual fidelity comparison
-- **FastAPI** — API layer (future)
+- **FastAPI** — backend API with session management
+- **React + TypeScript + Vite** — editor frontend
+- **Zustand** — lightweight state management
+- **boto3** — AWS Textract, Rekognition, Bedrock (OCR pipeline)
 - **pytest** — testing
 
 ## Strategy

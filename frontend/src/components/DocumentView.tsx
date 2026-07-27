@@ -28,15 +28,8 @@ export function DocumentView() {
       if (analysis.page_type === "table_of_contents") {
         elems = elems.filter((e: Overlay) => e.type === "header" || e.type === "footer");
       }
-      // On table pages, hide body elements within the table region only
-      if (analysis.page_type === "table" && tableData.has_table) {
-        const tableYMin = tableData.row_y_min || 0;
-        const tableYMax = (tableData.row_y_max || 0) + 20;
-        elems = elems.filter((e: Overlay) =>
-          e.type === "header" || e.type === "footer" ||
-          e.bbox.y0 > tableYMax || e.bbox.y1 < tableYMin
-        );
-      }
+      // On table pages, show all elements — table editor is in the panel
+      // but user can click any body element to edit it directly
       setOverlays(elems);
       setSelectedIdx(null);
     }).catch(() => setOverlays([]));

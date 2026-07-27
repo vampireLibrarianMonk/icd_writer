@@ -68,6 +68,14 @@ export function UnifiedEditor({ width }: { width: number }) {
     );
   }
 
+  if (isTocPage && !selected) {
+    return (
+      <div style={{ width: `${width}px`, padding: "12px", background: "var(--bg-panel)", overflow: "auto" }}>
+        <TocEditor />
+      </div>
+    );
+  }
+
   if (isTablePage && !selected) {
     return (
       <div style={{ width: `${width}px`, padding: "12px", background: "var(--bg-panel)", overflow: "auto" }}>
@@ -115,13 +123,21 @@ export function UnifiedEditor({ width }: { width: number }) {
 
   return (
     <div style={{ width: `${width}px`, padding: "16px", background: "var(--bg-panel)", overflow: "auto" }}>
-      {/* Back to table button on table pages */}
+      {/* Back button on special pages */}
       {isTablePage && (
         <button
           onClick={() => setSelected(null)}
           style={{ marginBottom: "8px", fontSize: "11px" }}
         >
           ← Back to Table
+        </button>
+      )}
+      {isTocPage && (
+        <button
+          onClick={() => setSelected(null)}
+          style={{ marginBottom: "8px", fontSize: "11px" }}
+        >
+          ← Back to TOC
         </button>
       )}
       {/* Element label */}

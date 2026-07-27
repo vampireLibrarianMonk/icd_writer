@@ -85,11 +85,11 @@ export function TableEditor() {
   };
 
   return (
-    <div style={{ padding: "12px", borderBottom: "1px solid #ddd", background: "#fafafa" }}>
-      <h4 style={{ margin: "0 0 8px", fontSize: "13px", color: "#333" }}>
+    <div style={{ padding: "12px", borderBottom: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
+      <h4 style={{ margin: "0 0 8px", fontSize: "13px", color: "var(--text-primary)" }}>
         📋 Table ({tableData.rows} × {tableData.columns})
       </h4>
-      <div style={{ overflow: "auto", maxHeight: "400px", border: "1px solid #ddd", borderRadius: "4px" }}>
+      <div style={{ overflow: "auto", maxHeight: "400px", border: "1px solid var(--border)", borderRadius: "4px" }}>
         <table style={{ borderCollapse: "collapse", fontSize: "11px", width: "100%" }}>
           <tbody>
             {tableData.data.map((row, rowIdx) => (
@@ -103,15 +103,16 @@ export function TableEditor() {
                       key={colIdx}
                       onClick={() => handleCellClick(rowIdx, colIdx)}
                       style={{
-                        border: "1px solid #ddd",
+                        border: "1px solid var(--border)",
                         padding: "4px 6px",
                         cursor: "pointer",
                         background: isEditing
-                          ? "#E3F2FD"
+                          ? "var(--accent-light)"
                           : isHeader
-                          ? "#e8e8e8"
-                          : "white",
+                          ? "var(--table-header)"
+                          : "var(--table-cell)",
                         fontWeight: isHeader ? "bold" : "normal",
+                        color: "var(--text-primary)",
                         minWidth: "50px",
                         maxWidth: "180px",
                         overflow: "hidden",
@@ -133,11 +134,13 @@ export function TableEditor() {
                             autoFocus
                             style={{
                               width: "100%",
-                              border: "1px solid #2196F3",
+                              border: "1px solid var(--accent)",
                               outline: "none",
                               padding: "2px 4px",
                               fontSize: "11px",
                               borderRadius: "2px",
+                              background: "var(--input-bg)",
+                              color: "var(--text-primary)",
                             }}
                           />
                           <button

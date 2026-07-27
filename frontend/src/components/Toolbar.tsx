@@ -72,7 +72,7 @@ export function Toolbar() {
       <button onClick={redo} disabled={!canRedo}>Redo</button>
       <span style={{ borderLeft: "1px solid #ccc", height: "20px", margin: "0 8px" }} />
       {documentLoaded && (
-        <span style={{ fontSize: "12px", color: "#666" }}>
+        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
           {editCount} edit{editCount !== 1 ? "s" : ""}
         </span>
       )}

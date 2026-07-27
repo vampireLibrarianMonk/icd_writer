@@ -6,14 +6,14 @@ export function EditPanel({ width }: { width: number }) {
     useEditorStore();
 
   return (
-    <div style={{ width: `${width}px`, borderLeft: "none", overflow: "auto", display: "flex", flexDirection: "column" }}>
+    <div style={{ width: `${width}px`, borderLeft: "none", overflow: "auto", display: "flex", flexDirection: "column", background: "var(--bg-panel)" }}>
       {/* Table editor at the top — most important for table pages */}
       {documentLoaded && <TableEditor />}
 
       {/* Block editor below */}
       <div style={{ padding: "16px" }}>
         {!selectedBlock ? (
-          <p style={{ color: "#999", fontSize: "13px" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>
             Click a text block on the page to edit, or use the table above.
           </p>
         ) : (
@@ -29,9 +29,11 @@ export function EditPanel({ width }: { width: number }) {
                 padding: "8px",
                 fontFamily: "serif",
                 fontSize: "13px",
-                border: "1px solid #ccc",
+                border: "1px solid var(--border)",
                 borderRadius: "4px",
                 resize: "vertical",
+                background: "var(--input-bg)",
+                color: "var(--text-primary)",
               }}
             />
 
@@ -55,9 +57,10 @@ export function EditPanel({ width }: { width: number }) {
                 disabled={editText === selectedBlock.text}
                 style={{
                   padding: "6px 16px",
-                  background: "#f5f5f5",
-                  border: "1px solid #ccc",
+                  background: "var(--bg-secondary)",
+                  border: "1px solid var(--border)",
                   borderRadius: "4px",
+                  color: "var(--text-primary)",
                   cursor: editText !== selectedBlock.text ? "pointer" : "default",
                 }}
               >
@@ -65,7 +68,7 @@ export function EditPanel({ width }: { width: number }) {
               </button>
             </div>
 
-            <div style={{ marginTop: "12px", fontSize: "11px", color: "#666" }}>
+            <div style={{ marginTop: "12px", fontSize: "11px", color: "var(--text-secondary)" }}>
               <div><b>ID:</b> {selectedBlock.id}</div>
               <div><b>Type:</b> {selectedBlock.type}</div>
               <div><b>Font:</b> {selectedBlock.font_size?.toFixed(1) || "—"}pt</div>

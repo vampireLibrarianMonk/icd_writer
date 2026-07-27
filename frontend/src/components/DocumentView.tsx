@@ -31,7 +31,7 @@ export function DocumentView() {
 
   if (!pageData) {
     return (
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#999" }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
         No document loaded. Click Open to begin.
       </div>
     );
@@ -52,7 +52,7 @@ export function DocumentView() {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Page navigation */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px", borderBottom: "1px solid #eee" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-secondary)" }}>
         <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}>◀</button>
         <span>Page {currentPage} / {totalPages}</span>
         <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages}>▶</button>

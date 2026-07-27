@@ -21,15 +21,23 @@ export function DocumentView() {
     Promise.all([
       fetch(`http://localhost:8000/document/page/${currentPage}/elements`).then((r) => r.json()),
       fetch(`http://localhost:8000/document/page/${currentPage}/analysis`).then((r) => r.json()),
-      fetch(`http://localhost:8000/document/page/${currentPage}/table`).then((r) => r.json()),
-    ]).then(([elemData, analysis, tableData]) => {
+      fetch(`http://localhost:8000/document/page/${currentPage}/table-zones`).then((r) => r.json()),
+    ]).then(([elemData, analysis, zonesData]) => {
       let elems = elemData.elements || [];
       // On TOC pages, only show header/footer overlays
       if (analysis.page_type === "table_of_contents") {
         elems = elems.filter((e: Overlay) => e.type === "header" || e.type === "footer");
       }
-      // On table pages, show all elements — table editor is in the panel
-      // but user can click any body element to edit it directly
+      // On table pages, hide body overlays within table drawing zones
+      if (analysis.page_type === "table" && zonesData.zones?.length > 0) {
+        const zones = zonesData.zones;
+        elems = elems.filter((e: Overlay) => {
+          if (e.type === "header" || e.type === "footer") return true;
+          // Keep element if it's NOT inside any table zone
+          const inZone = zones.some((z: any) => e.bbox.y0 >= z.y_min && e.bbox.y0 <= z.y_max);
+          return !inZone;
+        });
+      }
       setOverlays(elems);
       setSelectedIdx(null);
     }).catch(() => setOverlays([]));

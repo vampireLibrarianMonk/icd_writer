@@ -370,6 +370,58 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "No document loaded")
         return analyze_page_content(session.document_path, page_number)
 
+    @app.get("/document/page/{page_number}/table-zones")
+    def get_table_zones(page_number: int):
+        """Return actual table bounding boxes from drawing clusters.
+
+        More accurate than text-based table detection — uses grid lines
+        (filled rectangles) to find table regions.
+        """
+        import fitz
+
+        session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        doc = fitz.open(session.document_path)
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            raise HTTPException(400, f"Invalid page: {page_number}")
+
+        page = doc[page_number - 1]
+        drawings = page.get_drawings()
+        doc.close()
+
+        if len(drawings) < 10:
+            return {"zones": []}
+
+        # Get y positions from all drawings
+        draw_ys = sorted(set(
+            [int(d.get("rect").y0) for d in drawings if d.get("rect")]
+            + [int(d.get("rect").y1) for d in drawings if d.get("rect")]
+        ))
+
+        if not draw_ys:
+            return {"zones": []}
+
+        # Cluster into groups separated by gaps > 40pt
+        zones_raw = [[draw_ys[0]]]
+        for y in draw_ys[1:]:
+            if y - zones_raw[-1][-1] > 40:
+                zones_raw.append([y])
+            else:
+                zones_raw[-1].append(y)
+
+        # Filter to actual tables (height > 30pt, not header/footer rules)
+        zones = [
+            {"y_min": min(z), "y_max": max(z)}
+            for z in zones_raw
+            if max(z) - min(z) > 30
+        ]
+
+        return {"zones": zones}
+
+
     @app.get("/document/page/{page_number}/elements")
     def get_page_elements(page_number: int):
         """Return all clickable elements on a page with bboxes and labels.

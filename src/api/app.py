@@ -470,12 +470,19 @@ def create_app() -> FastAPI:
                 prev_y = prev_line[0]["y0"]
                 curr_y = line[0]["y0"]
                 gap = curr_y - prev_y
-                is_heading = line[0]["size"] > 13
-                # Numbered list: starts with "N." or "N) " pattern
+                curr_is_heading = line[0]["size"] > 13
+                prev_is_heading = current_para[0][0]["size"] > 13
+                # Numbered list or section: starts with "N." or "N) " or "N.N."
                 first_text = line[0]["text"].strip()
                 is_list_item = bool(re.match(r"^\d+[\.\)]\s", first_text))
+                is_section = bool(re.match(r"^\d+\.\d", first_text))
 
-                if gap > 18 or is_heading or is_list_item:
+                # Break paragraph on any of:
+                # - Large vertical gap
+                # - Current line is a heading
+                # - Previous block was a heading (headings are always standalone)
+                # - Numbered list/section item
+                if gap > 18 or curr_is_heading or prev_is_heading or is_list_item or is_section:
                     paragraphs.append(current_para)
                     current_para = [line]
                 else:

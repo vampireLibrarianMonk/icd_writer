@@ -21,11 +21,21 @@ export function DocumentView() {
     Promise.all([
       fetch(`http://localhost:8000/document/page/${currentPage}/elements`).then((r) => r.json()),
       fetch(`http://localhost:8000/document/page/${currentPage}/analysis`).then((r) => r.json()),
-    ]).then(([elemData, analysis]) => {
+      fetch(`http://localhost:8000/document/page/${currentPage}/table`).then((r) => r.json()),
+    ]).then(([elemData, analysis, tableData]) => {
       let elems = elemData.elements || [];
-      // On TOC and table pages, only show header/footer overlays
-      if (analysis.page_type === "table_of_contents" || analysis.page_type === "table") {
+      // On TOC pages, only show header/footer overlays
+      if (analysis.page_type === "table_of_contents") {
         elems = elems.filter((e: Overlay) => e.type === "header" || e.type === "footer");
+      }
+      // On table pages, hide body elements within the table region only
+      if (analysis.page_type === "table" && tableData.has_table) {
+        const tableYMin = tableData.row_y_min || 0;
+        const tableYMax = (tableData.row_y_max || 0) + 20;
+        elems = elems.filter((e: Overlay) =>
+          e.type === "header" || e.type === "footer" ||
+          e.bbox.y0 > tableYMax || e.bbox.y1 < tableYMin
+        );
       }
       setOverlays(elems);
       setSelectedIdx(null);

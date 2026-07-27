@@ -132,6 +132,8 @@ def analyze_page_content(pdf_path: Path | str, page_number: int) -> dict:
             "list_items": [li["text"] for li in list_items],
             "has_table": has_table,
             "table_grid_elements": drawings_count if has_table else 0,
+            "table_y_min": min((s["y"] for s in body_spans), default=0) if has_table else 0,
+            "table_y_max": max((s["y"] for s in body_spans if s["y"] < 500), default=0) + 20 if has_table else 0,
             "has_toc": has_toc,
         },
     }

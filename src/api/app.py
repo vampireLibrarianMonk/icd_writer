@@ -227,11 +227,11 @@ def create_app() -> FastAPI:
     # ─── Editing ───────────────────────────────────────────────────
 
     @app.get("/document/page/{page_number}/table")
-    def get_page_table(page_number: int):
-        """Detect and return table structure for a page.
+    def get_page_table(page_number: int, y_min: float = 0, y_max: float = 9999):
+        """Detect and return table structure for a page (or zone).
 
-        Uses raw span-level extraction (finer than Document IR blocks)
-        to detect and present table structure.
+        Uses raw span-level extraction. Pass y_min/y_max to filter
+        to a specific table zone on pages with multiple tables.
         """
         import fitz
 
@@ -263,6 +263,9 @@ def create_app() -> FastAPI:
                         y0 = span["bbox"][1]
                         # Skip header and footer regions
                         if y0 < 70 or y0 > page_height - 60:
+                            continue
+                        # Filter to zone if specified
+                        if y0 < y_min or y0 > y_max:
                             continue
                         spans.append({
                             "text": text,

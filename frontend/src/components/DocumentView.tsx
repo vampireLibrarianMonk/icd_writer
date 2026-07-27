@@ -29,14 +29,29 @@ export function DocumentView() {
         elems = elems.filter((e: Overlay) => e.type === "header" || e.type === "footer");
       }
       // On table pages, hide body overlays within table drawing zones
+      // AND add zone overlays so user can click them to open table editor
       if (analysis.page_type === "table" && zonesData.zones?.length > 0) {
         const zones = zonesData.zones;
         elems = elems.filter((e: Overlay) => {
           if (e.type === "header" || e.type === "footer") return true;
-          // Keep element if it's NOT inside any table zone
           const inZone = zones.some((z: any) => e.bbox.y0 >= z.y_min && e.bbox.y0 <= z.y_max);
           return !inZone;
         });
+        // Add table zone overlays
+        for (let i = 0; i < zones.length; i++) {
+          const z = zones[i];
+          elems.push({
+            type: "text_block" as any,
+            label: `Table ${i + 1}`,
+            text: `[Table ${i + 1} — click to edit]`,
+            id: null,
+            bbox: { x0: 80, y0: z.y_min, x1: 540, y1: z.y_max },
+            _isTableZone: true,
+            _zoneIdx: i,
+            _yMin: z.y_min,
+            _yMax: z.y_max,
+          } as any);
+        }
       }
       setOverlays(elems);
       setSelectedIdx(null);
@@ -45,8 +60,15 @@ export function DocumentView() {
 
   const handleClick = (idx: number) => {
     setSelectedIdx(idx);
-    const elem = overlays[idx];
-    window.dispatchEvent(new CustomEvent("element-selected", { detail: elem }));
+    const elem = overlays[idx] as any;
+    if (elem._isTableZone) {
+      // Dispatch table zone selection
+      window.dispatchEvent(new CustomEvent("table-zone-selected", {
+        detail: { yMin: elem._yMin, yMax: elem._yMax, label: elem.label }
+      }));
+    } else {
+      window.dispatchEvent(new CustomEvent("element-selected", { detail: elem }));
+    }
   };
 
   if (!pageData) {

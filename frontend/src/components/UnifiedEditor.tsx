@@ -17,12 +17,14 @@ export function UnifiedEditor({ width }: { width: number }) {
   const [editText, setEditText] = useState("");
   const [isTocPage, setIsTocPage] = useState(false);
   const [isTablePage, setIsTablePage] = useState(false);
+  const [selectedTableZone, setSelectedTableZone] = useState<{ yMin: number; yMax: number; label: string } | null>(null);
   const currentPage = useEditorStore((s) => s.currentPage);
 
   // Reset selection on page change
   useEffect(() => {
     setSelected(null);
     setEditText("");
+    setSelectedTableZone(null);
   }, [currentPage]);
 
   // Listen for element selection from page view
@@ -30,13 +32,20 @@ export function UnifiedEditor({ width }: { width: number }) {
     const handler = (e: CustomEvent<ClickableElement>) => {
       setSelected(e.detail);
       setEditText(e.detail.text);
+      setSelectedTableZone(null);
     };
-    const deselect = () => setSelected(null);
+    const deselect = () => { setSelected(null); setSelectedTableZone(null); };
+    const tableZone = (e: CustomEvent) => {
+      setSelectedTableZone(e.detail);
+      setSelected(null);
+    };
     window.addEventListener("element-selected" as any, handler);
     window.addEventListener("element-deselected" as any, deselect);
+    window.addEventListener("table-zone-selected" as any, tableZone);
     return () => {
       window.removeEventListener("element-selected" as any, handler);
       window.removeEventListener("element-deselected" as any, deselect);
+      window.removeEventListener("table-zone-selected" as any, tableZone);
     };
   }, []);
 
@@ -68,10 +77,27 @@ export function UnifiedEditor({ width }: { width: number }) {
     );
   }
 
-  if (isTablePage && !selected) {
+  if (isTablePage && !selected && !selectedTableZone) {
+    return (
+      <div style={{ width: `${width}px`, padding: "16px", color: "var(--text-muted)", background: "var(--bg-panel)" }}>
+        Click a table area on the page to edit it, or click any other element.
+      </div>
+    );
+  }
+
+  if (selectedTableZone) {
     return (
       <div style={{ width: `${width}px`, padding: "12px", background: "var(--bg-panel)", overflow: "auto" }}>
-        <TableEditor />
+        <button
+          onClick={() => setSelectedTableZone(null)}
+          style={{ marginBottom: "8px", fontSize: "11px" }}
+        >
+          ← Back
+        </button>
+        <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--accent)", marginBottom: "8px" }}>
+          {selectedTableZone.label}
+        </div>
+        <TableEditor yMin={selectedTableZone.yMin} yMax={selectedTableZone.yMax} />
       </div>
     );
   }
@@ -116,14 +142,6 @@ export function UnifiedEditor({ width }: { width: number }) {
   return (
     <div style={{ width: `${width}px`, padding: "16px", background: "var(--bg-panel)", overflow: "auto" }}>
       {/* Back button on special pages */}
-      {isTablePage && (
-        <button
-          onClick={() => setSelected(null)}
-          style={{ marginBottom: "8px", fontSize: "11px" }}
-        >
-          ← Back to Table
-        </button>
-      )}
       {isTocPage && (
         <button
           onClick={() => setSelected(null)}

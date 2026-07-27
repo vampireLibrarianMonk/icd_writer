@@ -13,7 +13,7 @@ interface TableData {
   data: TableCell[][];
 }
 
-export function TableEditor() {
+export function TableEditor({ yMin = 0, yMax = 9999 }: { yMin?: number; yMax?: number }) {
   const currentPage = useEditorStore((s) => s.currentPage);
   const totalPages = useEditorStore((s) => s.totalPages);
   const refreshTrigger = useEditorStore((s) => s.refreshTrigger);
@@ -26,13 +26,13 @@ export function TableEditor() {
       setTableData(null);
       return;
     }
-    fetch(`http://localhost:8000/document/page/${currentPage}/table`)
+    fetch(`http://localhost:8000/document/page/${currentPage}/table?y_min=${yMin}&y_max=${yMax}`)
       .then((res) => res.json())
       .then((data) => {
         setTableData(data);
       })
       .catch(() => setTableData(null));
-  }, [currentPage, totalPages, refreshTrigger]);
+  }, [currentPage, totalPages, refreshTrigger, yMin, yMax]);
 
   if (!tableData || !tableData.has_table) {
     return null;

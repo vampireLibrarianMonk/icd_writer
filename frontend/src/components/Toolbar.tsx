@@ -44,30 +44,15 @@ export function Toolbar() {
   };
 
   const handleExport = async () => {
-    const res = await fetch("http://localhost:8000/document/export", { method: "POST" });
-    const result = await res.json();
-    if (result.status === "exported" && result.path) {
-      // Get original filename from store and create export name
-      const origName = useEditorStore.getState().documentPath.split("/").pop()?.replace(".pdf", "") || "document";
-      const exportName = `${origName}_edited.pdf`;
+    // Direct download via hidden iframe to force save-as
+    const origName = useEditorStore.getState().documentPath.split("/").pop()?.replace(".pdf", "") || "document";
+    const exportName = `${origName}_edited.pdf`;
 
-      // Fetch the file as blob and trigger download
-      const downloadRes = await fetch(`http://localhost:8000/document/download?path=${encodeURIComponent(result.path)}`);
-      const blob = await downloadRes.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = exportName;
-      a.target = "_self";
-      a.rel = "noopener";
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
-    }
+    // First trigger the export on backend
+    await fetch("http://localhost:8000/document/export", { method: "POST" });
+
+    // Then download via window.location (forces browser download behavior)
+    window.location.href = `http://localhost:8000/document/export-download?filename=${encodeURIComponent(exportName)}`;
   };
 
   return (

@@ -384,6 +384,28 @@ def create_app() -> FastAPI:
             headers={"Content-Disposition": f"attachment; filename={file_path.name}"},
         )
 
+    @app.get("/document/export-download")
+    def export_and_download(filename: str = "exported.pdf"):
+        """Export the document and immediately return it as a download."""
+        from fastapi.responses import FileResponse
+        from src.output_dir import OutputDir
+        from src.rendering.ir_renderer import render_ir_to_pdf
+
+        doc_ir = state["document_ir"]
+        session = state["session"]
+        if not doc_ir or not session:
+            raise HTTPException(404, "No document loaded")
+
+        out = OutputDir(document_name=Path(session.document_path).stem)
+        render_ir_to_pdf(doc_ir, session.document_path, out.reconstructed_pdf_path)
+
+        return FileResponse(
+            str(out.reconstructed_pdf_path),
+            media_type="application/octet-stream",
+            filename=filename,
+            headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+        )
+
         if not session or not session.document_path:
             raise HTTPException(404, "No document loaded")
         return analyze_page_content(session.document_path, page_number)

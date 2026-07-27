@@ -63,7 +63,7 @@ export function UnifiedEditor({ width }: { width: number }) {
     );
   }
 
-  if (isTablePage) {
+  if (isTablePage && !selected) {
     return (
       <div style={{ width: `${width}px`, padding: "12px", background: "var(--bg-panel)", overflow: "auto" }}>
         <TableEditor />

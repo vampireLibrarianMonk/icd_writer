@@ -439,12 +439,59 @@ def create_app() -> FastAPI:
                             "size": span.get("size", 11),
                         })
 
-        # Check if this is a TOC or table page (skip body merging)
+        # Check if this is a TOC or table page
         from src.page_analysis import analyze_page_content
         page_analysis = analyze_page_content(session.document_path, page_number)
-        is_special_page = page_analysis.get("page_type") in ("table_of_contents", "table")
+        is_toc_page = page_analysis.get("page_type") == "table_of_contents"
+        is_table_page = page_analysis.get("page_type") == "table"
 
-        if not is_special_page:
+        # On TOC pages, skip body entirely (TOC editor handles)
+        if is_toc_page:
+            return {"page_number": page_number, "elements": elements}
+
+        # On table pages, get table y-range to exclude table spans from merge
+        table_y_min = 0
+        table_y_max = 0
+        if is_table_page:
+            # Get table range from the table detection logic
+            import fitz as fitz2
+            doc2 = fitz2.open(session.document_path)
+            page2 = doc2[page_number - 1]
+            page_height2 = page2.rect.height
+            raw2 = page2.get_text("rawdict", flags=fitz2.TEXT_PRESERVE_WHITESPACE)
+            doc2.close()
+            # Cluster y positions of body spans to find table rows
+            table_spans = []
+            for blk in raw2.get("blocks", []):
+                if blk.get("type") != 0:
+                    continue
+                for ln in blk.get("lines", []):
+                    for sp in ln.get("spans", []):
+                        cs = sp.get("chars", [])
+                        t = "".join(c["c"] for c in cs).strip()
+                        if t and 70 < sp["bbox"][1] < page_height2 - 72:
+                            table_spans.append(sp["bbox"][1])
+            if table_spans:
+                # Use the clustering from table endpoint logic
+                sorted_ys = sorted(table_spans)
+                clusters = [[sorted_ys[0]]]
+                for v in sorted_ys[1:]:
+                    if v - clusters[-1][-1] < 8:
+                        clusters[-1].append(v)
+                    else:
+                        clusters.append([v])
+                row_clusters = [sorted(c)[len(c)//2] for c in clusters if len(c) >= 2]
+                if len(row_clusters) >= 3:
+                    table_y_min = row_clusters[0]
+                    table_y_max = row_clusters[-1] + 20
+
+            # Filter body_spans to only those OUTSIDE the table region
+            body_spans = [s for s in body_spans if s["y0"] > table_y_max or s["y1"] < table_y_min]
+
+        if not body_spans:
+            return {"page_number": page_number, "elements": elements}
+
+        # Merge body spans into paragraphs
             # Merge body spans into paragraphs
             # First: group spans on the same line (same y within 3pt)
             body_spans.sort(key=lambda s: (s["y0"], s["x0"]))
@@ -475,12 +522,12 @@ def create_app() -> FastAPI:
                 # Numbered list or section: starts with "N." or "N) " or "N.N."
                 first_text = line[0]["text"].strip()
                 is_list_item = bool(re.match(r"^\d+[\.\)]\s", first_text))
-                is_section = bool(re.match(r"^\d+\.\d", first_text))
+                is_section = bool(re.match(r"^\d+\.\d+", first_text))
 
                 # Break paragraph on any of:
                 # - Large vertical gap
                 # - Current line is a heading
-                # - Previous block was a heading (headings are always standalone)
+                # - Previous block was a heading or section header
                 # - Numbered list/section item
                 if gap > 18 or curr_is_heading or prev_is_heading or is_list_item or is_section:
                     paragraphs.append(current_para)
@@ -488,6 +535,23 @@ def create_app() -> FastAPI:
                 else:
                     current_para.append(line)
             paragraphs.append(current_para)
+
+        # Post-process: if a paragraph starts with a section number,
+        # separate it as its own element (don't merge with following text)
+        final_paragraphs = []
+        for para in paragraphs:
+            if len(para) > 1:
+                first_text = para[0][0]["text"].strip()
+                if re.match(r"^\d+[\.\)]\s*$", first_text) or re.match(r"^\d+\.\d+", first_text):
+                    # Section header line is standalone
+                    final_paragraphs.append([para[0]])
+                    if len(para) > 1:
+                        final_paragraphs.append(para[1:])
+                else:
+                    final_paragraphs.append(para)
+            else:
+                final_paragraphs.append(para)
+        paragraphs = final_paragraphs
 
         # Convert merged paragraphs to elements
         page_ir = doc_ir.pages[page_number - 1]
@@ -502,6 +566,11 @@ def create_app() -> FastAPI:
             size = para_lines[0][0]["size"]
 
             label = "Heading" if size > 13 else "Paragraph"
+
+            # Section numbers are headings regardless of size
+            first_text = all_spans[0]["text"].strip()
+            if re.match(r"^\d+[\.\)]\s", first_text) or re.match(r"^\d+\.\d+", first_text):
+                label = "Heading"
 
             # Find matching IR block
             block_id = None

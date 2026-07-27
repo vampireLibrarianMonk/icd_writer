@@ -64,11 +64,19 @@ python3 -m src.cli render path/to/document.pdf --pages 1-5 --report
 
 # OCR pipeline for scanned/flattened PDFs (requires AWS credentials)
 python3 -m src.cli ocr-ingest path/to/scanned.pdf --region us-east-1
+
+# Search pipeline (requires OpenSearch + AWS credentials)
+docker compose up -d                                          # Start OpenSearch
+python3 -m src.cli search-index output/document_ir.yaml      # Index a document
+python3 -m src.cli search "thermal requirements" -k 5        # Search
+python3 -m src.cli search-eval                               # Run eval benchmark
+python3 -m src.cli search-models                             # Check for new models
+python3 -m src.cli search-status                             # Pipeline status
 ```
 
 ## Visual Fidelity Results
 
-Tested against `icds/20150010976.pdf` (NASA LVC ICD, 35 pages):
+Tested against `icds/digital/20150010976.pdf` (NASA LVC ICD, 35 pages):
 
 | Page | Type | Pixel Match | F1 Score |
 |------|------|-------------|----------|

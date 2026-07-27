@@ -25,6 +25,7 @@ Thumbs.db
 # Output artifacts
 archive/output/
 output/
+uploads/
 
 # Test cache
 .pytest_cache/

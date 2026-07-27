@@ -52,7 +52,7 @@ export function UnifiedEditor({ width }: { width: number }) {
 
   if (isTocPage) {
     return (
-      <div style={{ width: `${width}px`, position: "relative", background: "var(--bg-panel)", overflow: "auto" }}>
+      <div style={{ width: `${width}px`, padding: "12px", background: "var(--bg-panel)", overflow: "auto" }}>
         <TocEditor />
       </div>
     );

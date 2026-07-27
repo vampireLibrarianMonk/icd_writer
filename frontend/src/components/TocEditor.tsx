@@ -47,18 +47,8 @@ export function TocEditor() {
 
   const handleCancel = () => setEditingIdx(null);
 
-  // Dispatch a custom event so the UnifiedEditor knows TOC is handling this page
-  useEffect(() => {
-    if (tocData?.is_toc) {
-      window.dispatchEvent(new CustomEvent("toc-active", { detail: true }));
-    }
-    return () => {
-      window.dispatchEvent(new CustomEvent("toc-active", { detail: false }));
-    };
-  }, [tocData]);
-
   return (
-    <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, padding: "12px", overflow: "auto", background: "var(--bg-panel)" }}>
+    <div style={{ padding: "0" }}>
       <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--accent)", marginBottom: "8px" }}>
         📋 Table of Contents
       </div>

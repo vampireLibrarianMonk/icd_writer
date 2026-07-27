@@ -1,6 +1,7 @@
 import { useEditorStore } from "../store/editorStore";
 import { useState, useEffect } from "react";
 import { TocEditor } from "./TocEditor";
+import { TableEditor } from "./TableEditor";
 
 interface ClickableElement {
   type: "header" | "footer" | "table_cell" | "text_block";
@@ -15,6 +16,7 @@ export function UnifiedEditor({ width }: { width: number }) {
   const [selected, setSelected] = useState<ClickableElement | null>(null);
   const [editText, setEditText] = useState("");
   const [isTocPage, setIsTocPage] = useState(false);
+  const [isTablePage, setIsTablePage] = useState(false);
   const currentPage = useEditorStore((s) => s.currentPage);
 
   // Reset selection on page change
@@ -33,13 +35,16 @@ export function UnifiedEditor({ width }: { width: number }) {
     return () => window.removeEventListener("element-selected" as any, handler);
   }, []);
 
-  // Check if current page is TOC via page analysis
+  // Check page type
   useEffect(() => {
     if (!documentLoaded || !currentPage) return;
     fetch(`http://localhost:8000/document/page/${currentPage}/analysis`)
       .then((r) => r.json())
-      .then((data) => setIsTocPage(data.page_type === "table_of_contents"))
-      .catch(() => setIsTocPage(false));
+      .then((data) => {
+        setIsTocPage(data.page_type === "table_of_contents");
+        setIsTablePage(data.page_type === "table");
+      })
+      .catch(() => { setIsTocPage(false); setIsTablePage(false); });
   }, [currentPage, documentLoaded]);
 
   if (!documentLoaded) {
@@ -54,6 +59,14 @@ export function UnifiedEditor({ width }: { width: number }) {
     return (
       <div style={{ width: `${width}px`, padding: "12px", background: "var(--bg-panel)", overflow: "auto" }}>
         <TocEditor />
+      </div>
+    );
+  }
+
+  if (isTablePage) {
+    return (
+      <div style={{ width: `${width}px`, padding: "12px", background: "var(--bg-panel)", overflow: "auto" }}>
+        <TableEditor />
       </div>
     );
   }

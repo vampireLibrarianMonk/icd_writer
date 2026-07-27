@@ -23,8 +23,8 @@ export function DocumentView() {
       fetch(`http://localhost:8000/document/page/${currentPage}/analysis`).then((r) => r.json()),
     ]).then(([elemData, analysis]) => {
       let elems = elemData.elements || [];
-      // On TOC pages, only show header/footer overlays (body edited via TOC editor)
-      if (analysis.page_type === "table_of_contents") {
+      // On TOC and table pages, only show header/footer overlays
+      if (analysis.page_type === "table_of_contents" || analysis.page_type === "table") {
         elems = elems.filter((e: Overlay) => e.type === "header" || e.type === "footer");
       }
       setOverlays(elems);

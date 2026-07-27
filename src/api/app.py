@@ -439,12 +439,12 @@ def create_app() -> FastAPI:
                             "size": span.get("size", 11),
                         })
 
-        # Check if this is a TOC page (skip body merging, let TOC editor handle)
+        # Check if this is a TOC or table page (skip body merging)
         from src.page_analysis import analyze_page_content
         page_analysis = analyze_page_content(session.document_path, page_number)
-        is_toc_page = page_analysis.get("page_type") == "table_of_contents"
+        is_special_page = page_analysis.get("page_type") in ("table_of_contents", "table")
 
-        if not is_toc_page:
+        if not is_special_page:
             # Merge body spans into paragraphs
             # First: group spans on the same line (same y within 3pt)
             body_spans.sort(key=lambda s: (s["y0"], s["x0"]))

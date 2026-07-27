@@ -208,11 +208,12 @@ requirements:
 
 ### Phase 3: Semantic Layer
 
-- [ ] Requirement recognition (shall/must detection)
-- [ ] Interface identification
-- [ ] Cross-reference linking
-- [ ] Semantic validation (unique IDs, resolved references)
-- [ ] Revision comparison
+- [ ] TBD/TBR tracker (detect, tag status, assign owner, resolution target dates)
+- [ ] Requirement tagging in IR (link "shall" statements to requirement IDs)
+- [ ] Interface identification (provider/consumer/protocol)
+- [ ] Cross-reference linking (section refs, figure refs, table refs)
+- [ ] Semantic validation (unique IDs, all refs resolve, no orphans)
+- [ ] Revision comparison (diff two document versions side-by-side)
 
 ### Phase 4: Search and Intelligence (Optional)
 
@@ -221,6 +222,7 @@ requirements:
 - [ ] Amazon Bedrock for classification assistance
 - [ ] RAG over ICD corpus
 - [ ] Cross-document traceability
+- [ ] TBD dashboard (cross-document status, alerts, blocking analysis)
 
 ---
 

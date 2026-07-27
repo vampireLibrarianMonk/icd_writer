@@ -356,6 +356,21 @@ def create_app() -> FastAPI:
 
         return Response(content=img_bytes, media_type="image/png")
 
+    @app.get("/document/page/{page_number}/analysis")
+    def get_page_analysis(page_number: int):
+        """Return labeled content analysis for a page.
+
+        Tells the frontend what type of content is on this page
+        (table, TOC, text, etc.) and labels header/footer elements.
+        """
+        from src.page_analysis import analyze_page_content
+
+        session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+        return analyze_page_content(session.document_path, page_number)
+
+
     @app.get("/document/requirements")
     def get_requirements():
         """Extract and return all candidate requirements from the document."""

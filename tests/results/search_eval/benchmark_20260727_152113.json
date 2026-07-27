@@ -1,0 +1,185 @@
+{
+  "timestamp": "2026-07-27T15:21:13.231066+00:00",
+  "region": "us-east-1",
+  "models_tested": 15,
+  "baseline_model": "titan-v2-sliding/hybrid",
+  "baseline_recall": 0.9230769230769231,
+  "total_cost_usd": 0.0005021,
+  "total_duration_seconds": 20.330432891845703,
+  "results": [
+    {
+      "model_id": "amazon.titan-embed-text-v2:0",
+      "provider": "Amazon",
+      "stage_reached": 2,
+      "valid_embedding": true,
+      "actual_dimensions": 1024,
+      "error_message": null,
+      "best_recall": 0.6666666666666666,
+      "recall_delta": -0.2564102564102565,
+      "cost_usd": 6.000000000000001e-07
+    },
+    {
+      "model_id": "amazon.titan-embed-text-v1",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: Malformed input request: 2 schema violations found, please reformat your input a",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "cohere.embed-english-v3",
+      "provider": "Cohere",
+      "stage_reached": 2,
+      "valid_embedding": true,
+      "actual_dimensions": 1024,
+      "error_message": null,
+      "best_recall": 0.48717948717948717,
+      "recall_delta": -0.43589743589743596,
+      "cost_usd": 6.000000000000001e-07
+    },
+    {
+      "model_id": "cohere.embed-multilingual-v3",
+      "provider": "Cohere",
+      "stage_reached": 2,
+      "valid_embedding": true,
+      "actual_dimensions": 1024,
+      "error_message": null,
+      "best_recall": 0.3974358974358974,
+      "recall_delta": -0.5256410256410258,
+      "cost_usd": 6.000000000000001e-07
+    },
+    {
+      "model_id": "amazon.nova-2-multimodal-embeddings-v1:0",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: Malformed input request: #: required key [messages] not found, please reformat y",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "twelvelabs.marengo-embed-3-0-v1:0",
+      "provider": "TwelveLabs",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: Invalid JSON: $: required property 'inputType' not found $: must be valid to one",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "twelvelabs.marengo-embed-2-7-v1:0",
+      "provider": "TwelveLabs",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: Invocation of model ID twelvelabs.marengo-embed-2-7-v1:0 with on-demand throughp",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "cohere.embed-v4:0",
+      "provider": "Cohere",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "0",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "amazon.titan-embed-g1-text-02",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: Malformed input request: 2 schema violations found, please reformat your input a",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "amazon.titan-embed-text-v1:2:8k",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ResourceNotFoundException: Model not found.",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "amazon.titan-embed-text-v2:0:8k",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ResourceNotFoundException: Model not found.",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "amazon.titan-embed-image-v1:0",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: The provided model doesn't support on-demand throughput.",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "amazon.titan-embed-image-v1",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: Malformed input request: #: required key [requests] not found, #: extraneous key",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "cohere.embed-english-v3:0:512",
+      "provider": "Cohere",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ResourceNotFoundException: Model not found.",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "cohere.embed-multilingual-v3:0:512",
+      "provider": "Cohere",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ResourceNotFoundException: Model not found.",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    }
+  ],
+  "recommendations": [
+    {
+      "action": "stay",
+      "model_id": "titan-v2-sliding/hybrid",
+      "justification": "No new model significantly outperforms baseline (92.3%). Best new: amazon.titan-embed-text-v2:0 (66.7%).",
+      "recall": 0.9230769230769231,
+      "confidence": "low"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ from src.ingestion.pdf_reader import ingest_pdf
 from src.pipeline import process_pdf
 
 ICDS_DIR = Path(__file__).parent.parent.parent / "icds"
-SAMPLE_PDFS = list(ICDS_DIR.glob("*.pdf"))
+SAMPLE_PDFS = list(ICDS_DIR.glob("**/*.pdf"))
 
 
 @pytest.fixture(params=SAMPLE_PDFS, ids=[p.name for p in SAMPLE_PDFS])

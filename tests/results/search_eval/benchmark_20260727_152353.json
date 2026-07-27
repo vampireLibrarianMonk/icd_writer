@@ -1,0 +1,185 @@
+{
+  "timestamp": "2026-07-27T15:23:53.377245+00:00",
+  "region": "us-east-1",
+  "models_tested": 15,
+  "baseline_model": "titan-v2-sliding/hybrid",
+  "baseline_recall": 0.9230769230769231,
+  "total_cost_usd": 0.0008376999999999988,
+  "total_duration_seconds": 35.2363121509552,
+  "results": [
+    {
+      "model_id": "amazon.titan-embed-text-v2:0",
+      "provider": "Amazon",
+      "stage_reached": 2,
+      "valid_embedding": true,
+      "actual_dimensions": 1024,
+      "error_message": null,
+      "best_recall": 0.6666666666666666,
+      "recall_delta": -0.2564102564102565,
+      "cost_usd": 6.000000000000001e-07
+    },
+    {
+      "model_id": "amazon.titan-embed-text-v1",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: Malformed input request: 2 schema violations found, please reformat your input a",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "cohere.embed-english-v3",
+      "provider": "Cohere",
+      "stage_reached": 2,
+      "valid_embedding": true,
+      "actual_dimensions": 1024,
+      "error_message": null,
+      "best_recall": 0.6666666666666666,
+      "recall_delta": -0.2564102564102565,
+      "cost_usd": 6.000000000000001e-07
+    },
+    {
+      "model_id": "cohere.embed-multilingual-v3",
+      "provider": "Cohere",
+      "stage_reached": 2,
+      "valid_embedding": true,
+      "actual_dimensions": 1024,
+      "error_message": null,
+      "best_recall": 0.6666666666666666,
+      "recall_delta": -0.2564102564102565,
+      "cost_usd": 6.000000000000001e-07
+    },
+    {
+      "model_id": "amazon.nova-2-multimodal-embeddings-v1:0",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "Model amazon.nova-2-multimodal-embeddings-v1:0 appears to be multimodal/image-on",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "twelvelabs.marengo-embed-3-0-v1:0",
+      "provider": "TwelveLabs",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: Invalid JSON: $: must be valid to one and only one schema, but 0 are valid $: re",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "twelvelabs.marengo-embed-2-7-v1:0",
+      "provider": "TwelveLabs",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ValidationException: Invocation of model ID twelvelabs.marengo-embed-2-7-v1:0 with on-demand throughp",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "cohere.embed-v4:0",
+      "provider": "Cohere",
+      "stage_reached": 2,
+      "valid_embedding": true,
+      "actual_dimensions": 1536,
+      "error_message": null,
+      "best_recall": 0.6923076923076923,
+      "recall_delta": -0.23076923076923084,
+      "cost_usd": 6.000000000000001e-07
+    },
+    {
+      "model_id": "amazon.titan-embed-g1-text-02",
+      "provider": "Amazon",
+      "stage_reached": 2,
+      "valid_embedding": true,
+      "actual_dimensions": 1536,
+      "error_message": null,
+      "best_recall": 0.641025641025641,
+      "recall_delta": -0.28205128205128216,
+      "cost_usd": 6.000000000000001e-07
+    },
+    {
+      "model_id": "amazon.titan-embed-text-v1:2:8k",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ResourceNotFoundException: Model not found.",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "amazon.titan-embed-text-v2:0:8k",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ResourceNotFoundException: Model not found.",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "amazon.titan-embed-image-v1:0",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "Model amazon.titan-embed-image-v1:0 appears to be multimodal/image-only",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "amazon.titan-embed-image-v1",
+      "provider": "Amazon",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "Model amazon.titan-embed-image-v1 appears to be multimodal/image-only",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "cohere.embed-english-v3:0:512",
+      "provider": "Cohere",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ResourceNotFoundException: Model not found.",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    },
+    {
+      "model_id": "cohere.embed-multilingual-v3:0:512",
+      "provider": "Cohere",
+      "stage_reached": 1,
+      "valid_embedding": false,
+      "actual_dimensions": null,
+      "error_message": "ResourceNotFoundException: Model not found.",
+      "best_recall": 0.0,
+      "recall_delta": 0.0,
+      "cost_usd": 0.0
+    }
+  ],
+  "recommendations": [
+    {
+      "action": "stay",
+      "model_id": "titan-v2-sliding/hybrid",
+      "justification": "No new model significantly outperforms baseline (92.3%). Best new: cohere.embed-v4:0 (69.2%).",
+      "recall": 0.9230769230769231,
+      "confidence": "low"
+    }
+  ]
+}

@@ -47,17 +47,26 @@ export function Toolbar() {
     const res = await fetch("http://localhost:8000/document/export", { method: "POST" });
     const result = await res.json();
     if (result.status === "exported" && result.path) {
-      // Trigger browser download
+      // Get original filename from store and create export name
+      const origName = useEditorStore.getState().documentPath.split("/").pop()?.replace(".pdf", "") || "document";
+      const exportName = `${origName}_edited.pdf`;
+
+      // Fetch the file as blob and trigger download
       const downloadRes = await fetch(`http://localhost:8000/document/download?path=${encodeURIComponent(result.path)}`);
       const blob = await downloadRes.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = result.path.split("/").pop() || "exported.pdf";
+      a.download = exportName;
+      a.target = "_self";
+      a.rel = "noopener";
+      a.style.display = "none";
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
     }
   };
 

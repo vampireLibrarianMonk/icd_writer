@@ -26,10 +26,33 @@ source .venv/bin/activate
 
 # Install
 pip install -e ".[dev]"
+pip install weasyprint numpy boto3 python-multipart
 
 # Install metric-compatible fonts (recommended)
 sudo apt install fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation2
 
+# Run tests
+python3 -m pytest tests/ -v
+```
+
+## Running the Editor (UI)
+
+```bash
+# Terminal 1 — Backend API
+source .venv/bin/activate
+uvicorn src.api.app:app --reload --port 8000
+
+# Terminal 2 — Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` in your browser. Click **Open** to load a PDF.
+
+## CLI Usage (No UI)
+
+```bash
 # Show PDF metadata
 python3 -m src.cli info path/to/document.pdf
 
@@ -37,10 +60,10 @@ python3 -m src.cli info path/to/document.pdf
 python3 -m src.cli ingest path/to/document.pdf --output-dir ./output --format yaml
 
 # Render pages back to PDF (faithful reproduction)
-python3 -m src.cli render path/to/document.pdf --pages 1-5
+python3 -m src.cli render path/to/document.pdf --pages 1-5 --report
 
-# Run tests
-python3 -m pytest tests/ -v
+# OCR pipeline for scanned/flattened PDFs (requires AWS credentials)
+python3 -m src.cli ocr-ingest path/to/scanned.pdf --region us-east-1
 ```
 
 ## Visual Fidelity Results

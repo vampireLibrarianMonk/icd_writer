@@ -370,6 +370,73 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "No document loaded")
         return analyze_page_content(session.document_path, page_number)
 
+    @app.get("/document/page/{page_number}/header-footer")
+    def get_header_footer(page_number: int):
+        """Return individual header and footer elements for editing.
+
+        Unlike the block-level view, this returns each header/footer
+        span separately with position labels (left/center/right).
+        """
+        import fitz
+
+        session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        doc = fitz.open(session.document_path)
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            raise HTTPException(400, f"Invalid page: {page_number}")
+
+        page = doc[page_number - 1]
+        page_width = page.rect.width
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        doc.close()
+
+        headers = []
+        footers = []
+
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    text = "".join(c["c"] for c in chars).strip()
+                    if not text:
+                        continue
+
+                    y = span["bbox"][1]
+                    x = span["bbox"][0]
+
+                    if x < page_width * 0.33:
+                        alignment = "left"
+                    elif x > page_width * 0.55:
+                        alignment = "right"
+                    else:
+                        alignment = "center"
+
+                    entry = {
+                        "text": text,
+                        "alignment": alignment,
+                        "x": span["bbox"][0],
+                        "y": span["bbox"][1],
+                        "font": span["font"],
+                        "size": span["size"],
+                    }
+
+                    if y < 60:
+                        headers.append(entry)
+                    elif y > 700:
+                        footers.append(entry)
+
+        return {
+            "page_number": page_number,
+            "header": headers,
+            "footer": footers,
+        }
+
+
 
     @app.get("/document/requirements")
     def get_requirements():

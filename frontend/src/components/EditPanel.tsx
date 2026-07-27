@@ -1,5 +1,6 @@
 import { useEditorStore } from "../store/editorStore";
 import { TableEditor } from "./TableEditor";
+import { HeaderFooterEditor } from "./HeaderFooterEditor";
 
 export function EditPanel({ width }: { width: number }) {
   const { selectedBlock, editText, setEditText, applyEdit, revertEdit, documentLoaded } =
@@ -7,6 +8,9 @@ export function EditPanel({ width }: { width: number }) {
 
   return (
     <div style={{ width: `${width}px`, borderLeft: "none", overflow: "auto", display: "flex", flexDirection: "column", background: "var(--bg-panel)" }}>
+      {/* Header/Footer editor — individual left/center/right fields */}
+      {documentLoaded && <HeaderFooterEditor />}
+
       {/* Table editor at the top — most important for table pages */}
       {documentLoaded && <TableEditor />}
 

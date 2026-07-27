@@ -25,10 +25,10 @@ export function StatusBar() {
       display: "flex",
       justifyContent: "space-between",
       padding: "4px 16px",
-      borderTop: "1px solid #ddd",
-      background: "#f8f9fa",
+      borderTop: "1px solid var(--border)",
+      background: "var(--bg-secondary)",
       fontSize: "12px",
-      color: "#666",
+      color: "var(--text-secondary)",
     }}>
       <span>
         {filename} — {totalPages} pages — Page {currentPage}

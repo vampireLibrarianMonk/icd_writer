@@ -59,7 +59,7 @@ export function DocumentView() {
       </div>
 
       {/* Page with image background and text block overlays */}
-      <div style={{ flex: 1, overflow: "auto", padding: "16px", background: "#e8e8e8" }}>
+      <div style={{ flex: 1, overflow: "auto", padding: "16px", background: "var(--bg-canvas)" }}>
         <div
           style={{
             position: "relative",

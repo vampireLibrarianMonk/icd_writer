@@ -1,10 +1,16 @@
 import { useEditorStore } from "../store/editorStore";
 import { api } from "../api/client";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 export function Toolbar() {
   const { documentLoaded, editCount, undo, redo, canUndo, canRedo } = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [darkMode, setDarkMode] = useState(false);
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+    document.documentElement.setAttribute("data-theme", !darkMode ? "dark" : "light");
+  };
 
   const handleOpen = () => {
     fileInputRef.current?.click();
@@ -48,8 +54,8 @@ export function Toolbar() {
       alignItems: "center",
       gap: "8px",
       padding: "8px 16px",
-      borderBottom: "1px solid #ddd",
-      background: "#f8f9fa",
+      borderBottom: "1px solid var(--border)",
+      background: "var(--bg-secondary)",
     }}>
       <input
         ref={fileInputRef}
@@ -70,6 +76,10 @@ export function Toolbar() {
           {editCount} edit{editCount !== 1 ? "s" : ""}
         </span>
       )}
+      <span style={{ flex: 1 }} />
+      <button onClick={toggleDarkMode} title="Toggle dark/light mode">
+        {darkMode ? "☀️" : "🌙"}
+      </button>
     </div>
   );
 }

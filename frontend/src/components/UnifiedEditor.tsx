@@ -31,8 +31,13 @@ export function UnifiedEditor({ width }: { width: number }) {
       setSelected(e.detail);
       setEditText(e.detail.text);
     };
+    const deselect = () => setSelected(null);
     window.addEventListener("element-selected" as any, handler);
-    return () => window.removeEventListener("element-selected" as any, handler);
+    window.addEventListener("element-deselected" as any, deselect);
+    return () => {
+      window.removeEventListener("element-selected" as any, handler);
+      window.removeEventListener("element-deselected" as any, deselect);
+    };
   }, []);
 
   // Check page type
@@ -110,6 +115,15 @@ export function UnifiedEditor({ width }: { width: number }) {
 
   return (
     <div style={{ width: `${width}px`, padding: "16px", background: "var(--bg-panel)", overflow: "auto" }}>
+      {/* Back to table button on table pages */}
+      {isTablePage && (
+        <button
+          onClick={() => setSelected(null)}
+          style={{ marginBottom: "8px", fontSize: "11px" }}
+        >
+          ← Back to Table
+        </button>
+      )}
       {/* Element label */}
       <div style={{ fontSize: "12px", fontWeight: "bold", color: "var(--accent)", marginBottom: "8px" }}>
         {selected.label}

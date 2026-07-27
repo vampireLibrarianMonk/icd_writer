@@ -374,8 +374,9 @@ def create_app() -> FastAPI:
     def get_page_elements(page_number: int):
         """Return all clickable elements on a page with bboxes and labels.
 
-        Provides fine-grained spans for headers/footers (not merged blocks),
-        table cells, and body text blocks — each independently clickable.
+        Headers/footers: individual spans.
+        Body text: merged into logical paragraphs (consecutive lines
+        with gap ≤ 16pt and similar left margin).
         """
         import fitz
 
@@ -396,6 +397,7 @@ def create_app() -> FastAPI:
         doc.close()
 
         elements = []
+        body_spans = []  # collect body spans for paragraph merging
 
         for block in raw.get("blocks", []):
             if block.get("type") != 0:
@@ -407,47 +409,83 @@ def create_app() -> FastAPI:
                     if not text:
                         continue
 
-                    bbox = {
-                        "x0": span["bbox"][0],
-                        "y0": span["bbox"][1],
-                        "x1": span["bbox"][2],
-                        "y1": span["bbox"][3],
-                    }
-                    y = span["bbox"][1]
-                    x = span["bbox"][0]
+                    bbox = span["bbox"]
+                    y = bbox[1]
+                    x = bbox[0]
 
-                    # Classify
                     if y < 60:
                         align = "left" if x < page_width * 0.33 else "right" if x > page_width * 0.55 else "center"
-                        elem_type = "header"
-                        label = f"Header ({align})"
+                        elements.append({
+                            "type": "header",
+                            "label": f"Header ({align})",
+                            "text": text,
+                            "id": None,
+                            "bbox": {"x0": bbox[0], "y0": bbox[1], "x1": bbox[2], "y1": bbox[3]},
+                        })
                     elif y > page_height - 72:
                         align = "left" if x < page_width * 0.33 else "right" if x > page_width * 0.55 else "center"
-                        elem_type = "footer"
-                        label = f"Footer ({align})"
+                        elements.append({
+                            "type": "footer",
+                            "label": f"Footer ({align})",
+                            "text": text,
+                            "id": None,
+                            "bbox": {"x0": bbox[0], "y0": bbox[1], "x1": bbox[2], "y1": bbox[3]},
+                        })
                     else:
-                        elem_type = "text_block"
-                        size = span.get("size", 11)
-                        if size > 13:
-                            label = "Heading"
-                        else:
-                            label = "Text"
+                        body_spans.append({
+                            "text": text,
+                            "x0": bbox[0], "y0": bbox[1],
+                            "x1": bbox[2], "y1": bbox[3],
+                            "size": span.get("size", 11),
+                        })
 
-                    # Find matching IR block for id
-                    block_id = None
-                    page_ir = doc_ir.pages[page_number - 1]
-                    for ir_block in page_ir.text_blocks:
-                        if text in ir_block.text_verbatim and abs(ir_block.bbox.y0 - y) < 20:
-                            block_id = ir_block.id
-                            break
+        # Merge body spans into paragraphs
+        # Sort by y then x
+        body_spans.sort(key=lambda s: (s["y0"], s["x0"]))
 
-                    elements.append({
-                        "type": elem_type,
-                        "label": label,
-                        "text": text,
-                        "id": block_id,
-                        "bbox": bbox,
-                    })
+        paragraphs = []
+        if body_spans:
+            current_para = [body_spans[0]]
+            for span in body_spans[1:]:
+                prev = current_para[-1]
+                gap = span["y0"] - prev["y0"]
+                same_margin = abs(span["x0"] - current_para[0]["x0"]) < 30
+                is_continuation = gap <= 16 and same_margin and span["size"] <= 13
+
+                if is_continuation:
+                    current_para.append(span)
+                else:
+                    paragraphs.append(current_para)
+                    current_para = [span]
+            paragraphs.append(current_para)
+
+        # Convert merged paragraphs to elements
+        page_ir = doc_ir.pages[page_number - 1]
+        for para_spans in paragraphs:
+            text = " ".join(s["text"] for s in para_spans)
+            x0 = min(s["x0"] for s in para_spans)
+            y0 = min(s["y0"] for s in para_spans)
+            x1 = max(s["x1"] for s in para_spans)
+            y1 = max(s["y1"] for s in para_spans)
+            size = para_spans[0]["size"]
+
+            label = "Heading" if size > 13 else "Paragraph"
+
+            # Find matching IR block
+            block_id = None
+            for ir_block in page_ir.text_blocks:
+                if (abs(ir_block.bbox.y0 - y0) < 10 and
+                        para_spans[0]["text"][:15] in ir_block.text_verbatim):
+                    block_id = ir_block.id
+                    break
+
+            elements.append({
+                "type": "text_block",
+                "label": label,
+                "text": text,
+                "id": block_id,
+                "bbox": {"x0": x0, "y0": y0, "x1": x1, "y1": y1},
+            })
 
         return {"page_number": page_number, "elements": elements}
 

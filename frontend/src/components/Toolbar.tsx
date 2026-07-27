@@ -44,8 +44,21 @@ export function Toolbar() {
   };
 
   const handleExport = async () => {
-    const result = await api.exportPdf();
-    alert(`Exported to: ${result.path}`);
+    const res = await fetch("http://localhost:8000/document/export", { method: "POST" });
+    const result = await res.json();
+    if (result.status === "exported" && result.path) {
+      // Trigger browser download
+      const downloadRes = await fetch(`http://localhost:8000/document/download?path=${encodeURIComponent(result.path)}`);
+      const blob = await downloadRes.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.path.split("/").pop() || "exported.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
   return (

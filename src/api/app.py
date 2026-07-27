@@ -369,6 +369,20 @@ def create_app() -> FastAPI:
         from src.page_analysis import analyze_page_content
 
         session = state["session"]
+
+    @app.get("/document/download")
+    def download_file(path: str):
+        """Serve a generated file for browser download."""
+        from fastapi.responses import FileResponse
+        file_path = Path(path)
+        if not file_path.exists():
+            raise HTTPException(404, "File not found")
+        return FileResponse(
+            str(file_path),
+            media_type="application/pdf",
+            filename=file_path.name,
+        )
+
         if not session or not session.document_path:
             raise HTTPException(404, "No document loaded")
         return analyze_page_content(session.document_path, page_number)

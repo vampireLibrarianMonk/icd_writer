@@ -1,6 +1,6 @@
 import { Toolbar } from "./components/Toolbar";
 import { DocumentView } from "./components/DocumentView";
-import { EditPanel } from "./components/EditPanel";
+import { UnifiedEditor } from "./components/UnifiedEditor";
 import { StatusBar } from "./components/StatusBar";
 import { useState, useCallback } from "react";
 
@@ -47,7 +47,7 @@ function App() {
             if (!dragging) (e.currentTarget as HTMLElement).style.background = "#ddd";
           }}
         />
-        <EditPanel width={panelWidth} />
+        <UnifiedEditor width={panelWidth} />
       </div>
       <StatusBar />
     </div>

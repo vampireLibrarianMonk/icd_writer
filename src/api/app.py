@@ -94,24 +94,86 @@ def create_app() -> FastAPI:
 
     @app.post("/document/upload")
     async def upload_document(file: UploadFile):
-        """Upload a PDF file from the user's machine."""
-        import tempfile
+        """Upload a PDF file from the user's machine (deduplicated)."""
+        import hashlib
         import shutil
 
         if not file.filename or not file.filename.lower().endswith(".pdf"):
             raise HTTPException(400, "File must be a PDF")
 
-        # Save to a temp location
+        # Read content for hashing
+        content = await file.read()
+        file_hash = hashlib.sha256(content).hexdigest()
+
+        # Check if this file already exists anywhere
+        for scan_dir in [Path("icds/digital"), Path("uploads")]:
+            if not scan_dir.exists():
+                continue
+            for existing_pdf in scan_dir.glob("*.pdf"):
+                existing_hash = hashlib.sha256(existing_pdf.read_bytes()).hexdigest()
+                if existing_hash == file_hash:
+                    # Already exists — return path to existing copy
+                    return {
+                        "saved_path": str(existing_pdf),
+                        "filename": existing_pdf.name,
+                        "duplicate": True,
+                    }
+
+        # New file — save to uploads/
         upload_dir = Path("uploads")
         upload_dir.mkdir(exist_ok=True)
         save_path = upload_dir / file.filename
 
         with open(save_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
+            f.write(content)
 
-        # Now open it via the normal pipeline
-        return {"saved_path": str(save_path), "filename": file.filename}
+        return {"saved_path": str(save_path), "filename": file.filename, "duplicate": False}
 
+    @app.get("/documents")
+    def list_documents():
+        """List all available PDF documents (deduplicated by SHA-256)."""
+        import hashlib
+        from pathlib import Path
+
+        seen_hashes: dict[str, dict] = {}  # hash -> doc info
+        scan_dirs = [
+            Path("icds/digital"),
+            Path("uploads"),
+        ]
+
+        for scan_dir in scan_dirs:
+            if not scan_dir.exists():
+                continue
+            for pdf in sorted(scan_dir.glob("*.pdf")):
+                # Compute SHA-256 for deduplication
+                h = hashlib.sha256(pdf.read_bytes()).hexdigest()
+                if h in seen_hashes:
+                    # Duplicate — prefer the icds/digital copy over uploads
+                    existing = seen_hashes[h]
+                    if "icds/" in existing["path"]:
+                        continue  # Keep the icds version
+                    # Otherwise replace with this one
+
+                # Get PDF title from metadata
+                import fitz as _fitz
+                _doc = _fitz.open(str(pdf))
+                pdf_title = _doc.metadata.get("title", "") or ""
+                _doc.close()
+
+                seen_hashes[h] = {
+                    "path": str(pdf),
+                    "filename": pdf.name,
+                    "stem": pdf.stem,
+                    "title": pdf_title,
+                    "indexed": (Path("output") / f"{pdf.stem}_document_ir.yaml").exists(),
+                    "size_bytes": pdf.stat().st_size,
+                    "sha256": h,
+                }
+
+        docs = list(seen_hashes.values())
+        # Sort: indexed first, then alphabetical
+        docs.sort(key=lambda d: (not d["indexed"], d["filename"]))
+        return {"documents": docs}
 
     @app.post("/document/open")
     def open_document(pdf_path: str):
@@ -154,11 +216,26 @@ def create_app() -> FastAPI:
             session.document_sha256 = document_ir.metadata.sha256
             session.record(ActionType.DOCUMENT_OPENED, data={"path": str(path), "method": method})
 
+        # Check for related versions
+        from src.version_diff import detect_families, normalize_stem
+        related_versions = []
+        current_stem = normalize_stem(path.name)
+        families = detect_families()
+        for family in families:
+            if family.base_name == current_stem:
+                related_versions = [
+                    {"path": v.path, "filename": v.filename, "revision": v.revision, "doc_type": v.doc_type, "page_count": v.page_count}
+                    for v in family.versions
+                    if str(Path(v.path).resolve()) != str(path.resolve())
+                ]
+                break
+
         return {
             "status": "ready",
             "method": method,
             "pages": document_ir.page_count,
             "text_blocks": sum(len(p.text_blocks) for p in document_ir.pages),
+            "related_versions": related_versions,
         }
 
     @app.post("/document/open-ocr")
@@ -369,6 +446,9 @@ def create_app() -> FastAPI:
         from src.page_analysis import analyze_page_content
 
         session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(400, "No document loaded")
+        return analyze_page_content(session.document_path, page_number)
 
     @app.get("/document/download")
     def download_file(path: str):
@@ -473,6 +553,46 @@ def create_app() -> FastAPI:
 
         return {"zones": zones}
 
+
+    def _merge_spans_to_paragraphs(spans: list) -> list:
+        """Merge body spans into paragraph groups (lines of span lists)."""
+        import re
+        if not spans:
+            return []
+        spans.sort(key=lambda s: (s["y0"], s["x0"]))
+        # Group spans on the same line (same y within 3pt)
+        lines_grouped: list[list] = []
+        current_line = [spans[0]]
+        for span in spans[1:]:
+            if abs(span["y0"] - current_line[0]["y0"]) <= 3:
+                current_line.append(span)
+            else:
+                lines_grouped.append(current_line)
+                current_line = [span]
+        lines_grouped.append(current_line)
+
+        # Merge consecutive lines into paragraphs
+        paragraphs = []
+        current_para = [lines_grouped[0]]
+        for line in lines_grouped[1:]:
+            prev_line = current_para[-1]
+            prev_y = prev_line[0]["y0"]
+            curr_y = line[0]["y0"]
+            gap = curr_y - prev_y
+            curr_is_heading = line[0]["size"] > 13
+            prev_is_heading = current_para[0][0]["size"] > 13
+            first_text = line[0]["text"].strip()
+            is_list_item = bool(re.match(r"^\d+[\.\)]\s", first_text))
+            is_section = bool(re.match(r"^[1-9]\d*\.\d+", first_text))
+            is_bullet = first_text.startswith("•") or first_text.startswith("‣")
+
+            if gap > 18 or gap < 0 or curr_is_heading or prev_is_heading or is_list_item or is_section or is_bullet:
+                paragraphs.append(current_para)
+                current_para = [line]
+            else:
+                current_para.append(line)
+        paragraphs.append(current_para)
+        return paragraphs
 
     @app.get("/document/page/{page_number}/elements")
     def get_page_elements(page_number: int):
@@ -595,50 +715,27 @@ def create_app() -> FastAPI:
         if not body_spans:
             return {"page_number": page_number, "elements": elements}
 
-        # Merge body spans into paragraphs
-            # Merge body spans into paragraphs
-            # First: group spans on the same line (same y within 3pt)
-            body_spans.sort(key=lambda s: (s["y0"], s["x0"]))
-        lines_grouped: list[list] = []
-        if body_spans:
-            current_line = [body_spans[0]]
-            for span in body_spans[1:]:
-                if abs(span["y0"] - current_line[0]["y0"]) <= 3:
-                    current_line.append(span)
-                else:
-                    lines_grouped.append(current_line)
-                    current_line = [span]
-            lines_grouped.append(current_line)
+        # Detect columns by x-position clustering
+        x_positions = [s["x0"] for s in body_spans]
+        left_margin = min(x_positions)
+        right_spans = [s for s in body_spans if s["x0"] > page_width * 0.45]
+        left_spans = [s for s in body_spans if s["x0"] <= page_width * 0.45]
 
-        # Second: merge consecutive lines into paragraphs
-        # Break on: large gap (>18pt), heading font, or numbered list item
+        # If significant content in right half, treat as two-column
+        is_two_column = len(right_spans) > 3 and len(left_spans) > 3
+
+        if is_two_column:
+            # Process each column separately, then combine
+            all_paragraphs = []
+            all_paragraphs.extend(_merge_spans_to_paragraphs(left_spans))
+            all_paragraphs.extend(_merge_spans_to_paragraphs(right_spans))
+            paragraphs = all_paragraphs
+        else:
+            paragraphs = _merge_spans_to_paragraphs(body_spans)
+
+        # Post-process: if a paragraph starts with a section number,
+        # separate it as its own element (don't merge with following text)
         import re
-        paragraphs = []
-        if lines_grouped:
-            current_para = [lines_grouped[0]]
-            for line in lines_grouped[1:]:
-                prev_line = current_para[-1]
-                prev_y = prev_line[0]["y0"]
-                curr_y = line[0]["y0"]
-                gap = curr_y - prev_y
-                curr_is_heading = line[0]["size"] > 13
-                prev_is_heading = current_para[0][0]["size"] > 13
-                # Numbered list or section: starts with "N." or "N) " or "N.N."
-                first_text = line[0]["text"].strip()
-                is_list_item = bool(re.match(r"^\d+[\.\)]\s", first_text))
-                is_section = bool(re.match(r"^[1-9]\d*\.\d+", first_text))
-
-                # Break paragraph on any of:
-                # - Large vertical gap
-                # - Current line is a heading
-                # - Previous block was a heading or section header
-                # - Numbered list/section item
-                if gap > 18 or curr_is_heading or prev_is_heading or is_list_item or is_section:
-                    paragraphs.append(current_para)
-                    current_para = [line]
-                else:
-                    current_para.append(line)
-            paragraphs.append(current_para)
 
         # Post-process: if a paragraph starts with a section number,
         # separate it as its own element (don't merge with following text)
@@ -913,6 +1010,33 @@ def create_app() -> FastAPI:
     # ─── Editing ───────────────────────────────────────────────────
 
 
+    
+    @app.get("/document/tbd-items")
+    def get_tbd_items():
+        """Return all TBD/TBR/TBC/TBS items in the document."""
+        doc_ir = state["document_ir"]
+        if not doc_ir:
+            raise HTTPException(404, "No document loaded")
+
+        from src.tbd_tracker import scan_document
+
+        items = scan_document(doc_ir)
+        return {
+            "count": len(items),
+            "open": sum(1 for i in items if i.status == "open"),
+            "items": [
+                {
+                    "id": i.id,
+                    "type": i.item_type,
+                    "status": i.status,
+                    "page": i.page,
+                    "owner": i.owner,
+                    "context": i.context[:80],
+                }
+                for i in items
+            ],
+        }
+
     @app.put("/document/table-cell")
     def edit_table_cell(page: int, old_text: str, new_text: str):
         """Edit a table cell by finding and replacing text in the IR.
@@ -947,7 +1071,9 @@ def create_app() -> FastAPI:
 
     @app.put("/document/block/{block_id}")
     def edit_block(block_id: str, req: EditRequest):
-        """Edit a text block's content."""
+        """Edit a text block's content and reflow the page."""
+        from src.reflow import reflow_page
+
         doc_ir = state["document_ir"]
         if not doc_ir:
             raise HTTPException(404, "No document loaded")
@@ -958,6 +1084,9 @@ def create_app() -> FastAPI:
                 if block.id == block_id:
                     old_text = block.text_verbatim
                     block.text_verbatim = req.new_text
+
+                    # Run reflow on this page
+                    reflow_result = reflow_page(doc_ir, page.page_number, block_id)
 
                     # Record action
                     session = state["session"]
@@ -975,6 +1104,12 @@ def create_app() -> FastAPI:
                         "page": page.page_number,
                         "old_text": old_text,
                         "new_text": req.new_text,
+                        "reflow": {
+                            "height_delta_pt": round(reflow_result.height_delta_pt, 1),
+                            "blocks_shifted": reflow_result.blocks_shifted,
+                            "overflow_pt": round(reflow_result.overflow_pt, 1),
+                            "overflowing_blocks": reflow_result.overflowing_blocks,
+                        },
                     }
 
         raise HTTPException(404, f"Block not found: {block_id}")
@@ -1086,6 +1221,399 @@ def create_app() -> FastAPI:
             page_count, has_tables=tables, has_diagrams=diagrams, config=state["config"]
         )
         return cost
+
+    # ─── Search & RAG ────────────────────────────────────────────────
+
+    @app.post("/search")
+    def search_documents(query: str, k: int = 10, mode: str = "rrf", rag: bool = False):
+        """Search across indexed ICD documents, optionally with RAG."""
+        from src.search.config import SearchConfig, TITAN_V2_SLIDING
+        from src.search.retrieval import RetrievalMode
+
+        mode_map = {
+            "keyword": RetrievalMode.KEYWORD_ONLY,
+            "vector": RetrievalMode.VECTOR_ONLY,
+            "hybrid": RetrievalMode.HYBRID,
+            "rrf": RetrievalMode.HYBRID_RRF,
+        }
+        retrieval_mode = mode_map.get(mode, RetrievalMode.HYBRID_RRF)
+
+        search_config = SearchConfig(
+            opensearch_host="localhost",
+            opensearch_port=9200,
+            opensearch_scheme="http",
+            aws_region="us-east-1",
+        )
+
+        if rag:
+            from src.search.rag import RAGPipeline
+            pipeline = RAGPipeline(search_config=search_config, region="us-east-1")
+            answer = pipeline.ask(query, k=k, mode=retrieval_mode)
+            return {
+                "type": "rag",
+                "query": query,
+                "answer": answer.answer,
+                "confidence": answer.confidence,
+                "citations": [
+                    {
+                        "label": c.label,
+                        "document_title": c.document_title,
+                        "page_number": c.page_number,
+                        "section_heading": c.section_heading,
+                        "chunk_text": c.chunk_text,
+                    }
+                    for c in answer.citations
+                ],
+                "warnings": answer.warnings,
+                "cost_usd": answer.cost_usd,
+                "time_ms": answer.total_time_ms,
+            }
+        else:
+            from src.search.pipeline import SearchPipeline
+            pipeline = SearchPipeline(config=search_config, region="us-east-1")
+            result = pipeline.search(query, k=k, mode=retrieval_mode)
+            return {
+                "type": "search",
+                "query": query,
+                "total_hits": result.total_hits,
+                "took_ms": result.took_ms,
+                "hits": [
+                    {
+                        "chunk_id": h.chunk_id,
+                        "text": h.text,
+                        "score": h.score,
+                        "document_title": h.document_title,
+                        "page_number": h.page_number,
+                        "section_heading": h.section_heading,
+                        "content_type": h.content_type,
+                    }
+                    for h in result.hits
+                ],
+            }
+
+    # ─── TBD Dashboard ───────────────────────────────────────────────
+
+    @app.get("/tbd-dashboard")
+    def get_tbd_dashboard(status: str | None = None, item_type: str | None = None,
+                          document: str | None = None):
+        """Get TBD dashboard data with optional filters."""
+        from src.search.config import SearchConfig
+        from src.search.tbd_dashboard import TBDDashboard
+
+        search_config = SearchConfig(
+            opensearch_host="localhost",
+            opensearch_port=9200,
+            opensearch_scheme="http",
+            aws_region="us-east-1",
+        )
+        dashboard = TBDDashboard(search_config=search_config, region="us-east-1")
+
+        items = dashboard.filter_items(
+            status=status,
+            item_type=item_type,
+            document=document,
+        )
+        stats = dashboard.get_stats()
+
+        return {
+            "stats": {
+                "total_items": stats.total_items,
+                "open_count": stats.open_count,
+                "assigned_count": stats.assigned_count,
+                "resolved_count": stats.resolved_count,
+                "verified_count": stats.verified_count,
+                "tbd_count": stats.tbd_count,
+                "tbr_count": stats.tbr_count,
+                "in_shall_statements": stats.in_shall_statements,
+                "correlated_pairs": stats.correlated_pairs,
+                "conflicts": stats.conflicts,
+                "documents_count": stats.documents_count,
+            },
+            "items": [
+                {
+                    "item_id": item.item_id,
+                    "item_type": item.item_type,
+                    "status": item.status,
+                    "document_title": item.document_title,
+                    "page_number": item.page_number,
+                    "section_heading": item.section_heading,
+                    "context": item.context,
+                    "owner": item.owner,
+                    "in_shall_statement": item.in_shall_statement,
+                    "correlated_items": item.correlated_items,
+                    "resolution_value": item.resolution_value,
+                }
+                for item in items
+            ],
+            "correlations": [
+                {
+                    "item_a_id": c.item_a_id,
+                    "item_b_id": c.item_b_id,
+                    "confidence": c.confidence,
+                    "conflict": c.conflict,
+                    "conflict_detail": c.conflict_detail,
+                }
+                for c in dashboard._correlations
+            ],
+        }
+
+    @app.post("/tbd-dashboard/ingest")
+    def ingest_tbd_documents():
+        """Ingest TBDs from all Document IR files in output/."""
+        from pathlib import Path
+        from src.search.config import SearchConfig
+        from src.search.tbd_dashboard import TBDDashboard
+
+        search_config = SearchConfig(
+            opensearch_host="localhost",
+            opensearch_port=9200,
+            opensearch_scheme="http",
+            aws_region="us-east-1",
+        )
+        dashboard = TBDDashboard(search_config=search_config, region="us-east-1")
+
+        output_dir = Path("output")
+        ir_files = list(output_dir.glob("*_document_ir.yaml"))
+        total = 0
+        for ir_path in ir_files:
+            count = dashboard.ingest_document(ir_path)
+            total += count
+        dashboard.save_state()
+
+        return {"status": "ingested", "new_items": total, "total_files": len(ir_files)}
+
+    @app.put("/tbd-dashboard/item/{item_id}")
+    def update_tbd_item(item_id: str, status: str | None = None,
+                        owner: str | None = None,
+                        resolution_value: str | None = None):
+        """Update a TBD item's status/owner."""
+        from src.search.config import SearchConfig
+        from src.search.tbd_dashboard import TBDDashboard
+
+        search_config = SearchConfig(
+            opensearch_host="localhost",
+            opensearch_port=9200,
+            opensearch_scheme="http",
+            aws_region="us-east-1",
+        )
+        dashboard = TBDDashboard(search_config=search_config, region="us-east-1")
+
+        if status:
+            success = dashboard.update_status(item_id, status=status, owner=owner,
+                                              resolution_value=resolution_value)
+            if not success:
+                raise HTTPException(404, f"TBD item {item_id} not found")
+        return {"status": "updated", "item_id": item_id}
+
+    # ─── Version Detection & Diff ────────────────────────────────
+
+    @app.get("/documents/families")
+    def get_document_families():
+        """Detect document version families in the corpus."""
+        from src.version_diff import detect_families
+        families = detect_families()
+        return {
+            "families": [
+                {
+                    "base_name": f.base_name,
+                    "status": f.status,
+                    "versions": [
+                        {
+                            "path": v.path,
+                            "filename": v.filename,
+                            "page_count": v.page_count,
+                            "revision": v.revision,
+                            "date": v.date,
+                            "doc_type": v.doc_type,
+                        }
+                        for v in f.versions
+                    ],
+                }
+                for f in families
+            ]
+        }
+
+    @app.get("/documents/related")
+    def get_related_versions(pdf_path: str):
+        """Check if a specific document has related versions.
+
+        Called when a document is opened — returns related versions if any.
+        """
+        from pathlib import Path
+        from src.version_diff import detect_families, normalize_stem
+
+        current_stem = normalize_stem(Path(pdf_path).name)
+        families = detect_families()
+
+        for family in families:
+            if family.base_name == current_stem:
+                other_versions = [
+                    {
+                        "path": v.path,
+                        "filename": v.filename,
+                        "page_count": v.page_count,
+                        "revision": v.revision,
+                        "doc_type": v.doc_type,
+                    }
+                    for v in family.versions
+                    if str(Path(v.path).resolve()) != str(Path(pdf_path).resolve())
+                ]
+                if other_versions:
+                    return {
+                        "has_related": True,
+                        "family_name": family.base_name,
+                        "status": family.status,
+                        "other_versions": other_versions,
+                    }
+
+        return {"has_related": False}
+
+    @app.post("/documents/diff")
+    def run_version_diff(version_a: str, version_b: str,
+                         format: str = "markdown"):
+        """Run differential analysis between two document versions.
+
+        Returns structured diff report with progressive disclosure:
+        - Level 1: Summary (always free)
+        - Level 2: Per-section details (always free)
+        - Level 3: AI summaries (on demand via /documents/diff/summarize)
+        """
+        from pathlib import Path
+        from src.version_diff import full_diff, generate_report, quick_compare
+
+        path_a = Path(version_a)
+        path_b = Path(version_b)
+
+        if not path_a.exists():
+            raise HTTPException(404, f"File not found: {version_a}")
+        if not path_b.exists():
+            raise HTTPException(404, f"File not found: {version_b}")
+
+        # Quick compare first
+        quick = quick_compare(path_a, path_b)
+
+        # Full diff
+        report = full_diff(path_a, path_b)
+
+        # Generate formatted report
+        formatted = generate_report(report, format=format)
+
+        return {
+            "quick_compare": quick,
+            "summary": {
+                "sections_modified": report.sections_modified,
+                "sections_added": report.sections_added,
+                "sections_removed": report.sections_removed,
+                "requirement_changes": report.requirement_changes,
+                "tbd_changes": report.tbd_changes,
+                "editorial_changes": report.editorial_changes,
+                "text_overlap": report.text_overlap,
+                "total_diff_tokens": report.total_diff_tokens,
+                "estimated_llm_cost": round(report.total_diff_tokens * 0.00006 / 1000, 5),
+            },
+            "diffs": [
+                {
+                    "section_heading": d.section_heading,
+                    "change_type": d.change_type,
+                    "classification": d.classification,
+                    "has_requirement_change": d.has_requirement_change,
+                    "has_tbd_change": d.has_tbd_change,
+                    "page_old": d.page_old,
+                    "page_new": d.page_new,
+                    "old_text": d.old_text[:300],
+                    "new_text": d.new_text[:300],
+                    "ai_summary": d.ai_summary,
+                }
+                for d in report.diffs
+            ],
+            "tbd_sections": [
+                {
+                    "section_heading": d.section_heading,
+                    "change_type": d.change_type,
+                    "new_text": d.new_text[:200],
+                }
+                for d in report.diffs if d.has_tbd_change
+            ],
+            "formatted_report": formatted,
+        }
+
+    @app.post("/documents/diff/summarize")
+    def summarize_diff_section(version_a: str, version_b: str,
+                               section_heading: str):
+        """AI-summarize a single diff section (on-demand, shows cost).
+
+        Progressive disclosure Level 3: only called when user clicks
+        'Summarize with AI' on a specific section.
+        """
+        import json
+        import boto3
+        from pathlib import Path
+        from src.version_diff import full_diff
+
+        path_a = Path(version_a)
+        path_b = Path(version_b)
+        if not path_a.exists() or not path_b.exists():
+            raise HTTPException(404, "File not found")
+
+        report = full_diff(path_a, path_b)
+
+        # Find the requested section
+        target_diff = None
+        for d in report.diffs:
+            if d.section_heading.lower().strip() == section_heading.lower().strip():
+                target_diff = d
+                break
+
+        if not target_diff:
+            raise HTTPException(404, f"Section not found: {section_heading}")
+
+        # Build LLM prompt (minimal — just the diff hunk)
+        prompt = (
+            f"Section: {target_diff.section_heading}\n"
+            f"Change type: {target_diff.change_type}\n"
+        )
+        if target_diff.old_text:
+            prompt += f"Old text: {target_diff.old_text[:500]}\n"
+        if target_diff.new_text:
+            prompt += f"New text: {target_diff.new_text[:500]}\n"
+        prompt += "\nClassify this change (editorial/technical/structural) and explain its impact in 2-3 sentences."
+
+        # Call Bedrock (Nova Lite for cheapest option)
+        try:
+            bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
+            body = {
+                "messages": [{"role": "user", "content": [{"text": prompt}]}],
+                "inferenceConfig": {"maxTokens": 256, "temperature": 0.1},
+            }
+            resp = bedrock.invoke_model(
+                modelId="us.amazon.nova-lite-v1:0",
+                body=json.dumps(body),
+                contentType="application/json",
+                accept="application/json",
+            )
+            result = json.loads(resp["body"].read())
+            summary = ""
+            for block in result.get("output", {}).get("message", {}).get("content", []):
+                if "text" in block:
+                    summary += block["text"]
+
+            usage = result.get("usage", {})
+            cost = (usage.get("inputTokens", 0) * 0.00006 + usage.get("outputTokens", 0) * 0.00025) / 1000
+
+            return {
+                "section_heading": section_heading,
+                "ai_summary": summary,
+                "cost_usd": round(cost, 6),
+                "tokens_in": usage.get("inputTokens", 0),
+                "tokens_out": usage.get("outputTokens", 0),
+            }
+        except Exception as e:
+            return {
+                "section_heading": section_heading,
+                "ai_summary": None,
+                "error": str(e),
+                "cost_usd": 0,
+            }
 
     return app
 

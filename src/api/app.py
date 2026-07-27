@@ -439,35 +439,60 @@ def create_app() -> FastAPI:
                             "size": span.get("size", 11),
                         })
 
-        # Merge body spans into paragraphs
-        # Sort by y then x
-        body_spans.sort(key=lambda s: (s["y0"], s["x0"]))
+        # Check if this is a TOC page (skip body merging, let TOC editor handle)
+        from src.page_analysis import analyze_page_content
+        page_analysis = analyze_page_content(session.document_path, page_number)
+        is_toc_page = page_analysis.get("page_type") == "table_of_contents"
 
-        paragraphs = []
+        if not is_toc_page:
+            # Merge body spans into paragraphs
+            # First: group spans on the same line (same y within 3pt)
+            body_spans.sort(key=lambda s: (s["y0"], s["x0"]))
+        lines_grouped: list[list] = []
         if body_spans:
-            current_para = [body_spans[0]]
+            current_line = [body_spans[0]]
             for span in body_spans[1:]:
-                prev = current_para[-1]
-                gap = span["y0"] - prev["y0"]
-                same_margin = abs(span["x0"] - current_para[0]["x0"]) < 30
-                is_continuation = gap <= 16 and same_margin and span["size"] <= 13
-
-                if is_continuation:
-                    current_para.append(span)
+                if abs(span["y0"] - current_line[0]["y0"]) <= 3:
+                    current_line.append(span)
                 else:
+                    lines_grouped.append(current_line)
+                    current_line = [span]
+            lines_grouped.append(current_line)
+
+        # Second: merge consecutive lines into paragraphs
+        # Break on: large gap (>18pt), heading font, or numbered list item
+        import re
+        paragraphs = []
+        if lines_grouped:
+            current_para = [lines_grouped[0]]
+            for line in lines_grouped[1:]:
+                prev_line = current_para[-1]
+                prev_y = prev_line[0]["y0"]
+                curr_y = line[0]["y0"]
+                gap = curr_y - prev_y
+                is_heading = line[0]["size"] > 13
+                # Numbered list: starts with "N." or "N) " pattern
+                first_text = line[0]["text"].strip()
+                is_list_item = bool(re.match(r"^\d+[\.\)]\s", first_text))
+
+                if gap > 18 or is_heading or is_list_item:
                     paragraphs.append(current_para)
-                    current_para = [span]
+                    current_para = [line]
+                else:
+                    current_para.append(line)
             paragraphs.append(current_para)
 
         # Convert merged paragraphs to elements
         page_ir = doc_ir.pages[page_number - 1]
-        for para_spans in paragraphs:
-            text = " ".join(s["text"] for s in para_spans)
-            x0 = min(s["x0"] for s in para_spans)
-            y0 = min(s["y0"] for s in para_spans)
-            x1 = max(s["x1"] for s in para_spans)
-            y1 = max(s["y1"] for s in para_spans)
-            size = para_spans[0]["size"]
+        for para_lines in paragraphs:
+            # Flatten all spans in this paragraph
+            all_spans = [s for line in para_lines for s in line]
+            text = " ".join(s["text"] for s in all_spans)
+            x0 = min(s["x0"] for s in all_spans)
+            y0 = min(s["y0"] for s in all_spans)
+            x1 = max(s["x1"] for s in all_spans)
+            y1 = max(s["y1"] for s in all_spans)
+            size = para_lines[0][0]["size"]
 
             label = "Heading" if size > 13 else "Paragraph"
 
@@ -475,7 +500,7 @@ def create_app() -> FastAPI:
             block_id = None
             for ir_block in page_ir.text_blocks:
                 if (abs(ir_block.bbox.y0 - y0) < 10 and
-                        para_spans[0]["text"][:15] in ir_block.text_verbatim):
+                        all_spans[0]["text"][:15] in ir_block.text_verbatim):
                     block_id = ir_block.id
                     break
 

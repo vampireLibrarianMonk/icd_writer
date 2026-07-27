@@ -44,12 +44,8 @@ def detect_rogue_text(
 ) -> list[RogueText]:
     """Detect text blocks that are visually hidden in the rendered PDF.
 
-    Strategy:
-    1. Check text color vs background (white text on light bg = hidden)
-    2. Check if text region in rendered page shows the text content
-    3. Flag blocks that appear invisible
-
-    This catches z-order hiding, white-on-white text, and covered text.
+    Strategy: White text is rogue if there's no overlapping image or
+    filled drawing at its position (nothing dark behind it to make it visible).
     """
     source_pdf = Path(source_pdf)
     doc = fitz.open(str(source_pdf))
@@ -61,17 +57,31 @@ def detect_rogue_text(
             continue
 
         page = doc[page_idx]
-
-        # Get raw span data to check text color
         raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
 
-        # Render page for background color sampling
-        pix = page.get_pixmap(dpi=72)
-        img = np.array(PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples))
-        scale_x = pix.width / page.rect.width
-        scale_y = pix.height / page.rect.height
+        # Get all image rects on this page
+        image_rects = []
+        for img_info in page.get_images(full=True):
+            xref = img_info[0]
+            try:
+                for r in page.get_image_rects(xref):
+                    image_rects.append((r.x0, r.y0, r.x1, r.y1))
+            except Exception:
+                pass
 
-        # Build a map of text spans with their colors
+        # Get all filled drawings on this page
+        fill_rects = []
+        for d in page.get_drawings():
+            fill = d.get("fill")
+            if fill:  # has a fill color
+                rect = d.get("rect")
+                if rect:
+                    # Only count dark fills (not light gray/white fills)
+                    fill_bright = sum(fill) / len(fill) * 255
+                    if fill_bright < 200:
+                        fill_rects.append((rect.x0, rect.y0, rect.x1, rect.y1))
+
+        # Check each white text span
         for raw_block in raw.get("blocks", []):
             if raw_block.get("type") != 0:
                 continue
@@ -82,36 +92,36 @@ def detect_rogue_text(
                     if not text or len(text) < 2:
                         continue
 
-                    # Get text color
                     color_int = span.get("color", 0)
                     text_r = (color_int >> 16) & 0xFF
                     text_g = (color_int >> 8) & 0xFF
                     text_b = color_int & 0xFF
-
-                    # Get background color at text center
-                    bbox = span["bbox"]
-                    cx = int(((bbox[0] + bbox[2]) / 2) * scale_x)
-                    cy = int(((bbox[1] + bbox[3]) / 2) * scale_y)
-                    cx = max(0, min(cx, img.shape[1] - 1))
-                    cy = max(0, min(cy, img.shape[0] - 1))
-                    bg_color = img[cy, cx]
-
-                    # Check: is text color very close to background?
-                    # White text (>200) on truly white background (>220) = rogue
                     text_bright = (text_r + text_g + text_b) / 3
-                    bg_bright = bg_color.mean()
 
-                    reason = None
-                    if text_bright > 200 and bg_bright > 220:
-                        reason = "white_on_light"
-                    elif abs(text_bright - bg_bright) < 10 and text_bright > 150:
-                        reason = "same_as_background"
+                    if text_bright < 200:
+                        continue  # Not white text, skip
 
-                    if reason:
-                        # Find corresponding IR block (by position or text content)
-                        matched = False
+                    bbox = span["bbox"]
+                    text_cx = (bbox[0] + bbox[2]) / 2
+                    text_cy = (bbox[1] + bbox[3]) / 2
+
+                    # Check if any image overlaps this text position
+                    has_dark_bg = False
+                    for ix0, iy0, ix1, iy1 in image_rects:
+                        if ix0 <= text_cx <= ix1 and iy0 <= text_cy <= iy1:
+                            has_dark_bg = True
+                            break
+
+                    # Check if any filled drawing overlaps
+                    if not has_dark_bg:
+                        for fx0, fy0, fx1, fy1 in fill_rects:
+                            if fx0 <= text_cx <= fx1 and fy0 <= text_cy <= fy1:
+                                has_dark_bg = True
+                                break
+
+                    if not has_dark_bg:
+                        # White text with nothing dark behind it = rogue
                         for block in page_info.text_blocks:
-                            # Match by position proximity
                             if (abs(block.bbox.x0 - bbox[0]) < 20 and
                                     abs(block.bbox.y0 - bbox[1]) < 20):
                                 if not any(
@@ -127,14 +137,13 @@ def detect_rogue_text(
                                                 x0=bbox[0], y0=bbox[1],
                                                 x1=bbox[2], y1=bbox[3],
                                             ),
-                                            reason=reason,
-                                            confidence=0.9,
+                                            reason="white_no_background",
+                                            confidence=0.95,
                                         )
                                     )
-                                matched = True
                                 break
-                        if not matched:
-                            # Fallback: match by text content
+                            # Fallback: text content match
+                        else:
                             for block in page_info.text_blocks:
                                 if text in block.text_verbatim:
                                     if not any(
@@ -150,8 +159,8 @@ def detect_rogue_text(
                                                     x0=bbox[0], y0=bbox[1],
                                                     x1=bbox[2], y1=bbox[3],
                                                 ),
-                                                reason=reason,
-                                                confidence=0.9,
+                                                reason="white_no_background",
+                                                confidence=0.95,
                                             )
                                         )
                                     break

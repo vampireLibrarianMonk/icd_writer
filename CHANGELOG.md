@@ -1,0 +1,117 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [1.1.0] — 2026-07-29
+
+### Added
+- Page extension: edits that overflow a page boundary automatically create new pages
+  - Phase 1: paragraph blocks moved to new page
+  - Phase 2: list items, captions, and tables moved to new page
+- Document delete via UI (File > Remove Document) — removes from OpenSearch, IR, and TBD dashboard
+- Per-chunk embedding progress during indexing ("embedding chunk 42/86")
+- 25 unit tests for page split logic
+- 3 e2e tests for page extension via API
+
+### Changed
+- Overflow detection no longer misclassifies reflowed blocks as footers
+- Reflow engine uses `reflow_and_split()` as the main entry point (combines reflow + split)
+- Renderer handles pages with no source PDF (fully IR-rendered for split pages)
+- Edit API response now includes `total_pages`, `page_added`, and `new_page_number`
+
+---
+
+## [1.0.0] — 2026-07-28
+
+### Added
+- Docker containerization: backend, frontend, and OpenSearch in docker-compose
+- Document upload and ingestion pipeline with progress modal (upload → extract → index → TBD detect)
+- Per-config indexing progress in status polling
+- File menu (traditional dropdown) with Upload, Save, Export, Undo, Redo
+- Status bar with real-time ingestion progress
+- Document list filtering: only indexed documents appear in the dropdown
+- TBD dashboard document filter (third dropdown)
+- Pre-commit config: hadolint, gitleaks, oxlint, check-ast, mixed-line-ending
+- 13 unit tests for text extractor heading split
+- 7 e2e tests for ingest endpoint
+- 9 e2e tests for document list and TBD filters
+- USER_GUIDE.md with full demo walkthrough
+
+### Fixed
+- UTF-8 encoding across all file I/O (Windows cp1252 compatibility)
+- Text extraction: split blocks when section headings appear mid-text (fixes misattributed TBDs)
+- Export PDF: handle missing session gracefully with clear error message
+- TBD dashboard: use filename instead of PDF metadata for document_title
+- TBD navigation: stay on TBD tab (don't switch to editor or diff)
+- TBD document switch: correct same-document detection using page range
+- Dark mode: Diff tab callout colors now theme-aware
+- Frontend API base: uses relative URLs through nginx proxy in containers
+- OpenSearch connection: configurable via OPENSEARCH_HOST/PORT/SCHEME env vars
+
+### Changed
+- Toolbar redesigned: separate Upload button removed (lives in File menu only)
+- Documents endpoint only returns indexed documents
+- Dockerfiles organized into `docker/` directory with descriptive headers
+
+---
+
+## [0.9.0] — 2026-07-27
+
+### Added
+- Phase 3: TBD/TBR tracker with semantic validation
+- Phase 4: Search pipeline, RAG, TBD dashboard, model benchmarking
+- Phase 5: Text reflow engine (word wrap, block push-down, overflow detection)
+- Phase 6: Document version detection and differential analysis
+- Backend API: search, RAG, TBD dashboard, version diff, reflow integration
+- Frontend: search panel, TBD dashboard, version diff, element navigation
+- Comprehensive test suite: 290 tests across 7 documents
+- ICD test corpus expansion (7 documents) with Git LFS
+
+---
+
+## [0.3.0] — 2026-07-26
+
+### Added
+- Export PDF with browser save-as dialog
+- Table cell editing with Apply button
+- Undo/redo for all edit types
+- Dark/light mode toggle
+- Header/footer detection and editing
+- Page content analysis (labels elements by type)
+- TOC editor
+- Unified click-to-edit interface (replaces 3 separate editors)
+- Paragraph merging for body text editing
+- Grid density table detection
+
+### Fixed
+- Block edit 422 errors (EditRequest model placement)
+- Table cell persistence across undo/redo
+- TOC page overlay handling
+- Two-column page element detection
+
+---
+
+## [0.2.0] — 2026-07-26
+
+### Added
+- Working UI: PDF viewer, table editor, file upload
+- FastAPI backend with session journal and model configuration
+- React frontend scaffold
+- Phase 2: edit-to-export loop and requirement extraction
+
+---
+
+## [0.1.0] — 2026-07-25
+
+### Added
+- Initial PDF extraction pipeline (PyMuPDF)
+- Document IR intermediate representation (YAML/JSON)
+- Faithful PDF rendering via HTML/CSS + WeasyPrint
+- Page classification (text, scanned, table, diagram)
+- Character-level text positioning
+- Image extraction with border detection
+- Visual fidelity comparison reports

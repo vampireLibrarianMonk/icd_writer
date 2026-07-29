@@ -1,5 +1,7 @@
 # ICD Writer — User Guide
 
+**Version 1.1.0**
+
 A walkthrough of the ICD Writer application using the included NASA Interface Control Documents.
 
 ---
@@ -133,6 +135,21 @@ After making edits:
 1. **File > Export PDF...** generates a new PDF with your changes applied
 2. The browser downloads the edited PDF
 3. If pages were added during editing, the exported PDF will include those additional pages
+
+### Removing a Document
+
+To completely remove a document from the system:
+
+1. Open the document from the dropdown
+2. **File > Remove Document...**
+3. A confirmation dialog shows what will be removed:
+   - All search index data from OpenSearch
+   - The extracted document structure (IR file)
+   - Associated TBD/TBR items from the dashboard
+4. Click OK to confirm
+5. The document disappears from the dropdown and all related data is purged
+
+**Note:** Original PDFs in `icds/digital/` are never deleted (source-controlled). Only uploaded PDFs in `uploads/` are removed from disk.
 
 ---
 

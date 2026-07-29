@@ -1,0 +1,15 @@
+1.1.0
+
+# Version History (semantic versioning: major.minor.patch)
+#
+# 1.1.0  2026-07-29  e19b50d  Add document delete, page extension (tables/lists), per-chunk progress
+# 1.0.0  2026-07-28  17b9763  Containerize app, upload pipeline, full test suite — production-ready
+# 0.9.0  2026-07-27  7d722e0  Phase 3-6 complete: search, RAG, TBD tracker, version diff, reflow
+# 0.8.0  2026-07-27  cd33916  Frontend: search panel, TBD dashboard, version diff, element navigation
+# 0.7.0  2026-07-27  1e00ad6  Backend API: search, RAG, TBD dashboard, version diff integration
+# 0.6.0  2026-07-27  4b05202  Phase 6: document version detection and differential analysis
+# 0.5.0  2026-07-27  255b33a  Phase 5: text reflow engine (word wrap, block push-down, overflow)
+# 0.4.0  2026-07-27  c707732  Phase 4: search pipeline, RAG, TBD dashboard, model benchmarking
+# 0.3.0  2026-07-26  94ac2b9  Export PDF, table editing, undo/redo, dark mode, UI polish
+# 0.2.0  2026-07-26  1c59a82  Working UI: PDF viewer, table editor, file upload, sessions
+# 0.1.0  2026-07-25  6332075  Initial pipeline: PDF extraction, Document IR, faithful rendering

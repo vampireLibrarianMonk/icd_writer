@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "icd-document-editor"
-version = "0.1.0"
+version = "1.1.0"
 description = "NASA ICD PDF Conversion and Regeneration Pipeline"
 requires-python = ">=3.10"
 license = "MIT"

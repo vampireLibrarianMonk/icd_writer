@@ -72,8 +72,13 @@ export function Toolbar({ onFileUpload }: ToolbarProps) {
     setFileMenuOpen(false);
     const origName = useEditorStore.getState().documentPath.split("/").pop()?.replace(".pdf", "") || "document";
     const exportName = `${origName}_edited.pdf`;
-    const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
-    await fetch(`${API_BASE}/document/export`, { method: "POST" });
+    const API_BASE = import.meta.env.VITE_API_BASE || "";
+    const res = await fetch(`${API_BASE}/document/export`, { method: "POST" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Export failed" }));
+      alert(err.detail || "Export failed — is a document loaded?");
+      return;
+    }
     window.location.href = `${API_BASE}/document/export-download?filename=${encodeURIComponent(exportName)}`;
   };
 

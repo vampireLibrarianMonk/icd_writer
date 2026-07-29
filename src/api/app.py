@@ -1357,8 +1357,8 @@ def create_app() -> FastAPI:
         """Export the current document state as a PDF (with edits applied)."""
         doc_ir = state["document_ir"]
         session = state["session"]
-        if not doc_ir:
-            raise HTTPException(404, "No document loaded")
+        if not doc_ir or not session:
+            raise HTTPException(404, "No document loaded — open a document first")
 
         from src.output_dir import OutputDir
         from src.rendering.ir_renderer import render_ir_to_pdf

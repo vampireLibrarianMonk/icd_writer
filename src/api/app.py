@@ -1251,8 +1251,8 @@ def create_app() -> FastAPI:
 
     @app.put("/document/block/{block_id}")
     def edit_block(block_id: str, req: EditRequest):
-        """Edit a text block's content and reflow the page."""
-        from src.reflow import reflow_page
+        """Edit a text block's content, reflow the page, and split if overflow."""
+        from src.reflow import reflow_and_split
 
         doc_ir = state["document_ir"]
         if not doc_ir:
@@ -1265,8 +1265,8 @@ def create_app() -> FastAPI:
                     old_text = block.text_verbatim
                     block.text_verbatim = req.new_text
 
-                    # Run reflow on this page
-                    reflow_result = reflow_page(doc_ir, page.page_number, block_id)
+                    # Run reflow + page split if needed
+                    reflow_result = reflow_and_split(doc_ir, page.page_number, block_id)
 
                     # Record action
                     session = state["session"]
@@ -1282,6 +1282,7 @@ def create_app() -> FastAPI:
                         "status": "updated",
                         "block_id": block_id,
                         "page": page.page_number,
+                        "total_pages": doc_ir.page_count,
                         "old_text": old_text,
                         "new_text": req.new_text,
                         "reflow": {
@@ -1289,6 +1290,8 @@ def create_app() -> FastAPI:
                             "blocks_shifted": reflow_result.blocks_shifted,
                             "overflow_pt": round(reflow_result.overflow_pt, 1),
                             "overflowing_blocks": reflow_result.overflowing_blocks,
+                            "page_added": reflow_result.page_added,
+                            "new_page_number": reflow_result.new_page_number,
                         },
                     }
 

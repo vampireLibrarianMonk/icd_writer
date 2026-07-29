@@ -97,11 +97,42 @@ Once a document has been indexed, it appears in the **Open Document** dropdown i
 5. The document view updates immediately
 6. Use **Undo/Redo** (File menu or Ctrl+Z/Ctrl+Y) to revert
 
+### Page Extension (Automatic)
+
+When an edit makes a text block long enough to push content past the bottom of the page, the system automatically creates a new page:
+
+1. Open `HSI_SYS_015G.pdf` and navigate to **page 4**
+2. Click any paragraph block in the body area
+3. Replace the text with a very long passage (e.g., paste the same sentence 50+ times)
+4. Click **Apply**
+5. The response will show:
+   - `page_added: true` — a new page was created
+   - `new_page_number` — the inserted page number
+   - `total_pages` — the updated document length
+6. Navigate to the new page — it contains the overflowing paragraph blocks
+
+**How it works:**
+- The reflow engine calculates word-wrap height for the edited block
+- Subsequent blocks are shifted down to accommodate the new height
+- If any paragraph block's bottom edge exceeds the page margin (72pt from bottom), the system:
+  - Creates a new page with the same dimensions
+  - Moves all overflowing paragraph blocks to the new page
+  - Repositions them starting at the top margin
+  - Renumbers all subsequent pages
+- Headers and footers are never moved
+- Export PDF includes the new pages rendered from the document structure
+
+**Currently supported block types for page extension:**
+- Paragraphs (Phase 1)
+- Tables (Phase 2)
+- Lists (Phase 2)
+
 ### Exporting
 
 After making edits:
 1. **File > Export PDF...** generates a new PDF with your changes applied
 2. The browser downloads the edited PDF
+3. If pages were added during editing, the exported PDF will include those additional pages
 
 ---
 

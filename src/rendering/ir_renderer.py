@@ -32,8 +32,8 @@ def render_ir_to_pdf(
 
     Only pages with edits get re-rendered through HTML/CSS/WeasyPrint.
     Unchanged pages are copied directly from the source PDF (instant,
-    pixel-perfect). This makes export fast for large documents where
-    only 1-2 pages were modified.
+    pixel-perfect). Pages that were created by page-split (no source)
+    are rendered entirely from the Document IR.
 
     Args:
         document_ir: The (possibly edited) Document IR.
@@ -58,16 +58,31 @@ def render_ir_to_pdf(
     if pages is None:
         pages = list(range(1, document_ir.page_count + 1))
 
-    # Determine which pages have edits by comparing IR text to source
-    edited_pages = _find_edited_pages(document_ir, source_pdf, pages)
-
     source_doc = fitz_lib.open(str(source_pdf))
+    source_page_count = len(source_doc)
+
+    # Determine which pages have edits (only for pages that exist in source)
+    source_pages = [p for p in pages if p <= source_page_count]
+    edited_pages = _find_edited_pages(document_ir, source_pdf, source_pages)
+
     output_doc = fitz_lib.open()
 
     for page_num in pages:
         page_idx = page_num - 1
 
-        if page_num in edited_pages:
+        if page_num > source_page_count:
+            # New page (created by page split) — render entirely from IR
+            page_info = document_ir.pages[page_idx]
+            elements = _ir_blocks_to_elements(page_info)
+            html_content = render_page_to_html(
+                page_info.width_pt, page_info.height_pt, elements
+            )
+            pdf_bytes = HTML(string=html_content).write_pdf()
+            single_doc = fitz_lib.open(stream=pdf_bytes, filetype="pdf")
+            output_doc.insert_pdf(single_doc)
+            single_doc.close()
+
+        elif page_num in edited_pages:
             # Re-render this page (has edits)
             page_info = document_ir.pages[page_idx]
             page_width, page_height, elements = extract_page_elements(
@@ -116,6 +131,45 @@ def render_ir_to_pdf(
     return output_path
 
 
+def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
+    """Convert Document IR text blocks to renderable TextElements.
+
+    Used for pages that have no source PDF equivalent (created by page split).
+    """
+    from src.rendering.elements import TextElement
+
+    elements: list[PageElement] = []
+
+    for block in page_info.text_blocks:
+        font_size = 10.0
+        bold = False
+        italic = False
+        font_name = "Helvetica"
+
+        if block.style:
+            if block.style.font_size_pt:
+                font_size = block.style.font_size_pt
+            bold = block.style.bold
+            italic = block.style.italic
+            if block.style.font_name:
+                font_name = block.style.font_name
+
+        elements.append(
+            TextElement(
+                text=block.text_verbatim,
+                bbox=block.bbox,
+                font_name=font_name,
+                font_size_pt=font_size,
+                bold=bold,
+                italic=italic,
+                color="#000000",
+                char_positions=None,
+            )
+        )
+
+    return elements
+
+
 def _find_edited_pages(
     document_ir: DocumentIR, source_pdf: Path, pages: list[int]
 ) -> set[int]:
@@ -123,15 +177,17 @@ def _find_edited_pages(
 
     Compares the IR text blocks against freshly extracted text from the
     source PDF. Any page where text differs has been edited.
+    Only checks pages that exist in both the IR and source PDF.
     """
     import fitz
 
     edited: set[int] = set()
     doc = fitz.open(str(source_pdf))
+    source_page_count = len(doc)
 
     for page_num in pages:
         page_idx = page_num - 1
-        if page_idx >= len(document_ir.pages) or page_idx >= len(doc):
+        if page_idx >= len(document_ir.pages) or page_idx >= source_page_count:
             continue
 
         # Get source text

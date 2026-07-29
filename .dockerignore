@@ -1,10 +1,30 @@
+# Python
 .venv/
 __pycache__/
 *.egg-info/
-archive/output/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Frontend (built separately via its own Dockerfile)
+frontend/node_modules/
+frontend/dist/
+
+# Runtime data (mounted as volumes)
+output/
+icds/
+archive/
+
+# IDE / tooling
 .git/
 .idea/
 .kiro/
-.pytest_cache/
-*.pyc
-icds/
+.vscode/
+
+# Docker
+docker-compose.yml
+docker/
+
+# Docs (not needed in image)
+docs/
+*.md

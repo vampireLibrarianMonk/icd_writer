@@ -1,3 +1,8 @@
+# =============================================================================
+# ICD Writer — CLI Tool (Ingestion, Rendering, Search Indexing)
+# Standalone image for running the pipeline commands (ingest, render, report).
+# Usage: docker run icd-cli ingest <pdf_path>
+# =============================================================================
 FROM python:3.10-slim
 
 # System dependencies for WeasyPrint, PyMuPDF, and font rendering

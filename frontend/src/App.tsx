@@ -5,7 +5,10 @@ import { SearchPanel } from "./components/SearchPanel";
 import { TBDDashboard } from "./components/TBDDashboardPanel";
 import { VersionDiffPanel } from "./components/VersionDiffPanel";
 import { StatusBar } from "./components/StatusBar";
-import { useState, useCallback, useEffect } from "react";
+import { UploadProgressPanel } from "./components/UploadProgressPanel";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useEditorStore } from "./store/editorStore";
+import type { IngestStatus } from "./api/client";
 
 type RightPanel = "editor" | "search" | "tbd" | "diff";
 
@@ -13,6 +16,9 @@ function App() {
   const [panelWidth, setPanelWidth] = useState(420);
   const [dragging, setDragging] = useState(false);
   const [activePanel, setActivePanel] = useState<RightPanel>("editor");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [ingestStatus, setIngestStatus] = useState<IngestStatus | null>(null);
+  const suppressPanelSwitchRef = useRef(false);
 
   const handleMouseDown = () => setDragging(true);
 
@@ -28,19 +34,74 @@ function App() {
   const handleMouseUp = () => setDragging(false);
 
   // Auto-switch to editor tab when user clicks an element in DocumentView
+  // BUT not when navigating from TBD dashboard
   useEffect(() => {
-    const handleElementSelected = () => setActivePanel("editor");
-    const handleTableZoneSelected = () => setActivePanel("editor");
-    const handleRelatedVersions = () => setActivePanel("diff");
+    const handleTbdNavigate = () => {
+      // TBD navigation will trigger element-selected — suppress the panel switch
+      suppressPanelSwitchRef.current = true;
+      // Reset after a generous delay
+      setTimeout(() => { suppressPanelSwitchRef.current = false; }, 3000);
+    };
+
+    const handleElementSelected = () => {
+      if (suppressPanelSwitchRef.current) {
+        return; // Don't switch panel — stay on current tab (TBD)
+      }
+      setActivePanel("editor");
+    };
+
+    const handleTableZoneSelected = () => {
+      if (suppressPanelSwitchRef.current) return;
+      setActivePanel("editor");
+    };
+
+    const handleRelatedVersions = () => {
+      if (suppressPanelSwitchRef.current) return;
+      setActivePanel("diff");
+    };
+
+    window.addEventListener("navigate-to-tbd", handleTbdNavigate);
     window.addEventListener("element-selected", handleElementSelected);
     window.addEventListener("table-zone-selected", handleTableZoneSelected);
     window.addEventListener("related-versions-found", handleRelatedVersions);
     return () => {
+      window.removeEventListener("navigate-to-tbd", handleTbdNavigate);
       window.removeEventListener("element-selected", handleElementSelected);
       window.removeEventListener("table-zone-selected", handleTableZoneSelected);
       window.removeEventListener("related-versions-found", handleRelatedVersions);
     };
   }, []);
+
+  const handleFileUpload = (file: File) => {
+    setUploadFile(file);
+    setIngestStatus(null);
+  };
+
+  const handleIngestProgress = (status: IngestStatus) => {
+    setIngestStatus(status);
+  };
+
+  const handleIngestComplete = async (status: IngestStatus) => {
+    setIngestStatus(status);
+    setUploadFile(null);
+
+    // Auto-open the document on success
+    if (status.status === "done" && status.pdf_path) {
+      await useEditorStore.getState().loadDocument(status.pdf_path);
+    }
+  };
+
+  const handleUploadDismiss = () => {
+    setUploadFile(null);
+  };
+
+  // Clear the status bar summary after 10 seconds
+  useEffect(() => {
+    if (ingestStatus?.done) {
+      const timer = setTimeout(() => setIngestStatus(null), 15000);
+      return () => clearTimeout(timer);
+    }
+  }, [ingestStatus?.done]);
 
   return (
     <div
@@ -49,7 +110,7 @@ function App() {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      <Toolbar />
+      <Toolbar onFileUpload={handleFileUpload} />
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <DocumentView />
         {/* Resizable divider */}
@@ -106,7 +167,16 @@ function App() {
           </div>
         </div>
       </div>
-      <StatusBar />
+      <StatusBar ingestStatus={ingestStatus} />
+      {/* Upload progress modal (shown during active upload) */}
+      {uploadFile && (
+        <UploadProgressPanel
+          file={uploadFile}
+          onProgress={handleIngestProgress}
+          onComplete={handleIngestComplete}
+          onDismiss={handleUploadDismiss}
+        />
+      )}
     </div>
   );
 }

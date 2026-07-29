@@ -57,7 +57,7 @@ class SearchPipeline:
         import yaml
 
         ir_path = Path(ir_path)
-        with open(ir_path) as f:
+        with open(ir_path, encoding="utf-8") as f:
             doc_ir = yaml.safe_load(f)
 
         metadata = doc_ir.get("metadata", {})

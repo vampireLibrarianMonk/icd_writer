@@ -84,25 +84,71 @@ def _extract_page_blocks(page: fitz.Page, page_number: int) -> list[TextBlock]:
         if not full_text:
             continue
 
-        block_type = _classify_block_type(full_text, dominant_style, block_bbox, page)
-        block_id = f"block-p{page_number:02d}-b{block_idx:02d}"
+        # Split block if it contains an embedded heading mid-text
+        sub_blocks = _split_on_embedded_headings(full_text)
 
-        blocks.append(
-            TextBlock(
-                id=block_id,
-                block_type=block_type,
-                page=page_number,
-                bbox=block_bbox,
-                text_verbatim=full_text,
-                reading_order=block_idx,
-                style=dominant_style,
-                confidence=1.0,
-                is_ocr=False,
+        for sub_text in sub_blocks:
+            sub_style = dominant_style
+            block_type = _classify_block_type(sub_text, sub_style, block_bbox, page)
+            block_id = f"block-p{page_number:02d}-b{block_idx:02d}"
+
+            blocks.append(
+                TextBlock(
+                    id=block_id,
+                    block_type=block_type,
+                    page=page_number,
+                    bbox=block_bbox,
+                    text_verbatim=sub_text,
+                    reading_order=block_idx,
+                    style=sub_style,
+                    confidence=1.0,
+                    is_ocr=False,
+                )
             )
-        )
-        block_idx += 1
+            block_idx += 1
 
     return blocks
+
+
+def _split_on_embedded_headings(text: str) -> list[str]:
+    """Split a text block if it contains section heading patterns mid-text.
+
+    For example, a block containing:
+        "TBD.\n3.17 Trial Accepted Message"
+    gets split into:
+        ["TBD.", "3.17 Trial Accepted Message"]
+    """
+    import re
+
+    lines = text.split("\n")
+    if len(lines) <= 1:
+        return [text]
+
+    # Section heading pattern: starts with number like "3.17 " or "A.1 "
+    heading_pattern = re.compile(r"^[A-Z0-9]+(\.[0-9]+)+\.?\s+\S")
+
+    result_blocks: list[str] = []
+    current_lines: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        # If this line looks like a heading AND we already have content above it, split
+        if stripped and heading_pattern.match(stripped) and current_lines:
+            # Flush the content before this heading
+            block_text = "\n".join(current_lines).strip()
+            if block_text:
+                result_blocks.append(block_text)
+            current_lines = [line]
+        else:
+            current_lines.append(line)
+
+    # Flush remaining
+    if current_lines:
+        block_text = "\n".join(current_lines).strip()
+        if block_text:
+            result_blocks.append(block_text)
+
+    return result_blocks if result_blocks else [text]
 
 
 def _get_dominant_style(block: dict) -> TextStyle:

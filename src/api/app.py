@@ -6,6 +6,7 @@ and session management. WebSocket support for real-time progress.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -129,9 +130,186 @@ def create_app() -> FastAPI:
 
         return {"saved_path": str(save_path), "filename": file.filename, "duplicate": False}
 
+    # ─── Document Ingestion Pipeline ───────────────────────────────
+
+    # In-memory ingestion status tracker
+    ingest_status: dict[str, dict] = {}
+
+    @app.post("/document/ingest")
+    async def ingest_document(file: UploadFile):
+        """Upload and fully ingest a PDF: extract → index → detect TBDs.
+
+        Returns an ingest_id for polling progress via /document/ingest/status.
+        The pipeline runs in a background thread.
+        """
+        import hashlib
+        import uuid
+        import threading
+
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(400, "File must be a PDF")
+
+        content = await file.read()
+        file_hash = hashlib.sha256(content).hexdigest()
+        ingest_id = str(uuid.uuid4())[:8]
+
+        # Check for duplicate
+        existing_path = None
+        for scan_dir in [Path("icds/digital"), Path("uploads")]:
+            if not scan_dir.exists():
+                continue
+            for existing_pdf in scan_dir.glob("*.pdf"):
+                existing_hash = hashlib.sha256(existing_pdf.read_bytes()).hexdigest()
+                if existing_hash == file_hash:
+                    existing_path = existing_pdf
+                    break
+            if existing_path:
+                break
+
+        if existing_path:
+            pdf_path = existing_path
+        else:
+            upload_dir = Path("uploads")
+            upload_dir.mkdir(exist_ok=True)
+            pdf_path = upload_dir / file.filename
+            with open(pdf_path, "wb") as f:
+                f.write(content)
+
+        # Initialize status
+        ingest_status[ingest_id] = {
+            "ingest_id": ingest_id,
+            "filename": file.filename,
+            "pdf_path": str(pdf_path),
+            "status": "uploading",
+            "step": 1,
+            "total_steps": 5,
+            "message": "File received, starting extraction...",
+            "progress_pct": 10,
+            "pages": 0,
+            "text_blocks": 0,
+            "chunks_indexed": 0,
+            "tbd_count": 0,
+            "tbr_count": 0,
+            "error": None,
+            "done": False,
+        }
+
+        def run_pipeline():
+            """Execute the full ingestion pipeline in background."""
+            try:
+                status = ingest_status[ingest_id]
+
+                # Step 1: Extract Document IR
+                status.update({"status": "extracting", "step": 2, "message": "Extracting text and structure from PDF...", "progress_pct": 20})
+                from src.pipeline import process_pdf
+                from src.serialization import to_yaml
+
+                document_ir = process_pdf(pdf_path)
+                ir_path = Path("output") / f"{pdf_path.stem}_document_ir.yaml"
+                ir_path.parent.mkdir(parents=True, exist_ok=True)
+                to_yaml(document_ir, ir_path)
+
+                page_count = document_ir.page_count
+                total_blocks = sum(len(p.text_blocks) for p in document_ir.pages)
+                status.update({
+                    "pages": page_count,
+                    "text_blocks": total_blocks,
+                    "message": f"Extracted {page_count} pages, {total_blocks} text blocks. Indexing...",
+                    "progress_pct": 40,
+                })
+
+                # Step 2: Index into OpenSearch
+                status.update({"status": "indexing", "step": 3, "message": "Generating embeddings and indexing into OpenSearch...", "progress_pct": 50})
+                from src.search.config import SearchConfig, ALL_CONFIGS
+                from src.search.pipeline import SearchPipeline
+
+                search_config = SearchConfig(
+                    opensearch_host=os.environ.get("OPENSEARCH_HOST", "localhost"),
+                    opensearch_port=int(os.environ.get("OPENSEARCH_PORT", "9200")),
+                    opensearch_scheme=os.environ.get("OPENSEARCH_SCHEME", "http"),
+                    aws_region="us-east-1",
+                )
+                pipeline = SearchPipeline(config=search_config, region="us-east-1")
+
+                # Index per-config with progress updates
+                total_configs = len(ALL_CONFIGS)
+                index_results = {}
+                for i, cfg in enumerate(ALL_CONFIGS):
+                    pct = 50 + int((i / total_configs) * 25)
+                    status.update({
+                        "message": f"Indexing config {i + 1}/{total_configs}: {cfg.name}...",
+                        "progress_pct": pct,
+                    })
+                    result = pipeline.ingest_document(ir_path, configs=[cfg])
+                    index_results.update(result)
+
+                total_chunks = sum(index_results.values())
+                status.update({
+                    "chunks_indexed": total_chunks,
+                    "message": f"Indexed {total_chunks} chunks across {total_configs} configurations.",
+                    "progress_pct": 75,
+                })
+
+                # Step 3: Detect TBDs/TBRs
+                status.update({"status": "detecting_tbds", "step": 4, "message": "Scanning for TBD/TBR items...", "progress_pct": 85})
+                from src.search.tbd_dashboard import TBDDashboard
+
+                dashboard = TBDDashboard(search_config=search_config, region="us-east-1")
+                tbd_count_new = dashboard.ingest_document(ir_path)
+                dashboard.save_state()
+
+                # Count TBDs vs TBRs from the dashboard items
+                tbd_count = 0
+                tbr_count = 0
+                for item in dashboard._items.values():
+                    doc_stem = pdf_path.stem.lower()
+                    item_doc = item.document_title.lower()
+                    if doc_stem in item_doc or item_doc in doc_stem or doc_stem[:10] in item_doc:
+                        if item.item_type == "TBD":
+                            tbd_count += 1
+                        elif item.item_type == "TBR":
+                            tbr_count += 1
+
+                status.update({
+                    "tbd_count": tbd_count,
+                    "tbr_count": tbr_count,
+                    "progress_pct": 95,
+                })
+
+                # Step 4: Done
+                status.update({
+                    "status": "done",
+                    "step": 5,
+                    "message": f"Complete! {page_count} pages, {total_chunks} chunks indexed, {tbd_count} TBDs, {tbr_count} TBRs.",
+                    "progress_pct": 100,
+                    "done": True,
+                })
+
+            except Exception as e:
+                ingest_status[ingest_id].update({
+                    "status": "error",
+                    "message": f"Pipeline failed: {str(e)}",
+                    "error": str(e),
+                    "done": True,
+                })
+
+        # Launch pipeline in background thread
+        thread = threading.Thread(target=run_pipeline, daemon=True)
+        thread.start()
+
+        return {"ingest_id": ingest_id, "status": "started", "filename": file.filename}
+
+    @app.get("/document/ingest/status/{ingest_id}")
+    def get_ingest_status(ingest_id: str):
+        """Poll ingestion progress for a given ingest_id."""
+        status = ingest_status.get(ingest_id)
+        if not status:
+            raise HTTPException(404, f"No ingestion found with id: {ingest_id}")
+        return status
+
     @app.get("/documents")
     def list_documents():
-        """List all available PDF documents (deduplicated by SHA-256)."""
+        """List available PDF documents that have been indexed."""
         import hashlib
         from pathlib import Path
 
@@ -145,14 +323,17 @@ def create_app() -> FastAPI:
             if not scan_dir.exists():
                 continue
             for pdf in sorted(scan_dir.glob("*.pdf")):
+                # Only include documents that have been indexed
+                ir_path = Path("output") / f"{pdf.stem}_document_ir.yaml"
+                if not ir_path.exists():
+                    continue
+
                 # Compute SHA-256 for deduplication
                 h = hashlib.sha256(pdf.read_bytes()).hexdigest()
                 if h in seen_hashes:
-                    # Duplicate — prefer the icds/digital copy over uploads
                     existing = seen_hashes[h]
                     if "icds/" in existing["path"]:
-                        continue  # Keep the icds version
-                    # Otherwise replace with this one
+                        continue
 
                 # Get PDF title from metadata
                 import fitz as _fitz
@@ -165,14 +346,13 @@ def create_app() -> FastAPI:
                     "filename": pdf.name,
                     "stem": pdf.stem,
                     "title": pdf_title,
-                    "indexed": (Path("output") / f"{pdf.stem}_document_ir.yaml").exists(),
+                    "indexed": True,
                     "size_bytes": pdf.stat().st_size,
                     "sha256": h,
                 }
 
         docs = list(seen_hashes.values())
-        # Sort: indexed first, then alphabetical
-        docs.sort(key=lambda d: (not d["indexed"], d["filename"]))
+        docs.sort(key=lambda d: d["filename"])
         return {"documents": docs}
 
     @app.post("/document/open")
@@ -1239,9 +1419,9 @@ def create_app() -> FastAPI:
         retrieval_mode = mode_map.get(mode, RetrievalMode.HYBRID_RRF)
 
         search_config = SearchConfig(
-            opensearch_host="localhost",
-            opensearch_port=9200,
-            opensearch_scheme="http",
+            opensearch_host=os.environ.get("OPENSEARCH_HOST", "localhost"),
+            opensearch_port=int(os.environ.get("OPENSEARCH_PORT", "9200")),
+            opensearch_scheme=os.environ.get("OPENSEARCH_SCHEME", "http"),
             aws_region="us-east-1",
         )
 
@@ -1301,9 +1481,9 @@ def create_app() -> FastAPI:
         from src.search.tbd_dashboard import TBDDashboard
 
         search_config = SearchConfig(
-            opensearch_host="localhost",
-            opensearch_port=9200,
-            opensearch_scheme="http",
+            opensearch_host=os.environ.get("OPENSEARCH_HOST", "localhost"),
+            opensearch_port=int(os.environ.get("OPENSEARCH_PORT", "9200")),
+            opensearch_scheme=os.environ.get("OPENSEARCH_SCHEME", "http"),
             aws_region="us-east-1",
         )
         dashboard = TBDDashboard(search_config=search_config, region="us-east-1")
@@ -1365,9 +1545,9 @@ def create_app() -> FastAPI:
         from src.search.tbd_dashboard import TBDDashboard
 
         search_config = SearchConfig(
-            opensearch_host="localhost",
-            opensearch_port=9200,
-            opensearch_scheme="http",
+            opensearch_host=os.environ.get("OPENSEARCH_HOST", "localhost"),
+            opensearch_port=int(os.environ.get("OPENSEARCH_PORT", "9200")),
+            opensearch_scheme=os.environ.get("OPENSEARCH_SCHEME", "http"),
             aws_region="us-east-1",
         )
         dashboard = TBDDashboard(search_config=search_config, region="us-east-1")
@@ -1391,9 +1571,9 @@ def create_app() -> FastAPI:
         from src.search.tbd_dashboard import TBDDashboard
 
         search_config = SearchConfig(
-            opensearch_host="localhost",
-            opensearch_port=9200,
-            opensearch_scheme="http",
+            opensearch_host=os.environ.get("OPENSEARCH_HOST", "localhost"),
+            opensearch_port=int(os.environ.get("OPENSEARCH_PORT", "9200")),
+            opensearch_scheme=os.environ.get("OPENSEARCH_SCHEME", "http"),
             aws_region="us-east-1",
         )
         dashboard = TBDDashboard(search_config=search_config, region="us-east-1")

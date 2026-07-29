@@ -316,7 +316,7 @@ class ModelBenchmark:
         from .chunking import chunk_document
 
         ir_path = Path(ir_path)
-        with open(ir_path) as f:
+        with open(ir_path, encoding="utf-8") as f:
             doc_ir = yaml.safe_load(f)
 
         metadata = doc_ir.get("metadata", {})
@@ -816,6 +816,6 @@ class ModelBenchmark:
                 for rec in report.recommendations
             ],
         }
-        path.write_text(json.dumps(data, indent=2))
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.info(f"Benchmark report saved: {path}")
         return path

@@ -1,42 +1,100 @@
 import { useEditorStore } from "../store/editorStore";
+import type { IngestStatus } from "../api/client";
 
-export function StatusBar() {
+interface StatusBarProps {
+  ingestStatus?: IngestStatus | null;
+}
+
+export function StatusBar({ ingestStatus }: StatusBarProps) {
   const { documentLoaded, documentPath, totalPages, currentPage, editCount, sessionId } =
     useEditorStore();
-
-  if (!documentLoaded) {
-    return (
-      <div style={{
-        padding: "4px 16px",
-        borderTop: "1px solid #ddd",
-        background: "#f8f9fa",
-        fontSize: "12px",
-        color: "#666",
-      }}>
-        Ready
-      </div>
-    );
-  }
-
-  const filename = documentPath.split("/").pop() || documentPath;
 
   return (
     <div style={{
       display: "flex",
-      justifyContent: "space-between",
-      padding: "4px 16px",
-      borderTop: "1px solid var(--border)",
-      background: "var(--bg-secondary)",
+      flexDirection: "column",
+      borderTop: "1px solid var(--border, #ddd)",
+      background: "var(--bg-secondary, #f8f9fa)",
       fontSize: "12px",
-      color: "var(--text-secondary)",
     }}>
-      <span>
-        {filename} — {totalPages} pages — Page {currentPage}
-      </span>
-      <span>
-        {editCount > 0 && `${editCount} unsaved edit${editCount > 1 ? "s" : ""} · `}
-        Session: {sessionId?.slice(0, 8)}
-      </span>
+      {/* Ingestion progress bar */}
+      {ingestStatus && !ingestStatus.done && (
+        <div style={{ padding: "4px 16px", borderBottom: "1px solid var(--border, #eee)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
+            <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>
+              {ingestStatus.status === "uploading" && "📤"}
+              {ingestStatus.status === "extracting" && "📄"}
+              {ingestStatus.status === "indexing" && "🔍"}
+              {ingestStatus.status === "detecting_tbds" && "📋"}
+              {" "}{ingestStatus.message}
+            </span>
+          </div>
+          <div style={{
+            height: "3px",
+            background: "var(--bg-tertiary, #e0e0e0)",
+            borderRadius: "2px",
+            overflow: "hidden",
+          }}>
+            <div style={{
+              height: "100%",
+              width: `${ingestStatus.progress_pct}%`,
+              background: "#1976d2",
+              borderRadius: "2px",
+              transition: "width 0.4s ease",
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Ingestion complete summary */}
+      {ingestStatus && ingestStatus.done && ingestStatus.status === "done" && (
+        <div style={{
+          padding: "4px 16px",
+          borderBottom: "1px solid var(--border, #eee)",
+          color: "#2e7d32",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+        }}>
+          <span>✅ {ingestStatus.filename}: {ingestStatus.pages} pages, {ingestStatus.chunks_indexed} chunks indexed</span>
+          {(ingestStatus.tbd_count > 0 || ingestStatus.tbr_count > 0) && (
+            <span style={{ color: "#e65100", fontWeight: 500 }}>
+              — {ingestStatus.tbd_count} TBDs{ingestStatus.tbr_count > 0 ? `, ${ingestStatus.tbr_count} TBRs` : ""}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Ingestion error */}
+      {ingestStatus && ingestStatus.done && ingestStatus.status === "error" && (
+        <div style={{
+          padding: "4px 16px",
+          borderBottom: "1px solid var(--border, #eee)",
+          color: "#c62828",
+        }}>
+          ❌ {ingestStatus.message}
+        </div>
+      )}
+
+      {/* Main status line */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "4px 16px",
+        color: "var(--text-secondary, #666)",
+      }}>
+        {!documentLoaded ? (
+          <span>Ready — Upload a PDF or open an indexed document</span>
+        ) : (
+          <span>
+            {documentPath.split("/").pop()} — {totalPages} pages — Page {currentPage}
+          </span>
+        )}
+        <span>
+          {documentLoaded && editCount > 0 && `${editCount} unsaved edit${editCount > 1 ? "s" : ""} · `}
+          {sessionId && `Session: ${sessionId.slice(0, 8)}`}
+        </span>
+      </div>
     </div>
   );
 }

@@ -372,7 +372,7 @@ class EvalHarness:
                 for r in run.results
             ],
         }
-        filename.write_text(json.dumps(data, indent=2))
+        filename.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.info(f"Saved eval run to {filename}")
         return filename
 
@@ -384,7 +384,7 @@ class EvalHarness:
         files = sorted(output_path.glob("eval_*.json"), reverse=True)
         if not files:
             return None
-        data = json.loads(files[0].read_text())
+        data = json.loads(files[0].read_text(encoding="utf-8"))
         # Reconstruct minimal EvalRun for comparison
         return EvalRun(
             run_id=data["run_id"],

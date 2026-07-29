@@ -9,11 +9,17 @@ interface DocInfo {
   indexed: boolean;
 }
 
-export function Toolbar() {
+interface ToolbarProps {
+  onFileUpload: (file: File) => void;
+}
+
+export function Toolbar({ onFileUpload }: ToolbarProps) {
   const { documentLoaded, editCount, undo, redo, canUndo, canRedo, documentPath } = useEditorStore();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [availableDocs, setAvailableDocs] = useState<DocInfo[]>([]);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const fileMenuRef = useRef<HTMLDivElement>(null);
 
   // Load available documents on mount
   useEffect(() => {
@@ -22,10 +28,22 @@ export function Toolbar() {
     }).catch(() => {});
   }, []);
 
+  // Close file menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (fileMenuRef.current && !fileMenuRef.current.contains(e.target as Node)) {
+        setFileMenuOpen(false);
+      }
+    };
+    if (fileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [fileMenuOpen]);
+
   const handleDocSwitch = async (path: string) => {
     if (path === documentPath) return;
     await useEditorStore.getState().loadDocument(path);
-    // Refresh available docs (indexed status may change)
     api.listDocuments().then((res) => setAvailableDocs(res.documents || []));
   };
 
@@ -34,105 +52,184 @@ export function Toolbar() {
     document.documentElement.setAttribute("data-theme", !darkMode ? "dark" : "light");
   };
 
-  const handleOpen = () => {
-    fileInputRef.current?.click();
+  const handleUploadClick = () => {
+    uploadInputRef.current?.click();
   };
 
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Upload file to backend
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const res = await fetch("http://localhost:8000/document/upload", {
-      method: "POST",
-      body: formData,
-    });
-    const result = await res.json();
-
-    if (result.status === "ready" || result.saved_path) {
-      await useEditorStore.getState().loadDocument(result.saved_path);
-    }
-
-    // Reset input so same file can be re-selected
+    onFileUpload(file);
     e.target.value = "";
   };
 
   const handleSave = async () => {
+    setFileMenuOpen(false);
     await api.saveSession();
-    alert("Session saved.");
   };
 
   const handleExport = async () => {
-    // Direct download via hidden iframe to force save-as
+    setFileMenuOpen(false);
     const origName = useEditorStore.getState().documentPath.split("/").pop()?.replace(".pdf", "") || "document";
     const exportName = `${origName}_edited.pdf`;
-
-    // First trigger the export on backend
-    await fetch("http://localhost:8000/document/export", { method: "POST" });
-
-    // Then download via window.location (forces browser download behavior)
-    window.location.href = `http://localhost:8000/document/export-download?filename=${encodeURIComponent(exportName)}`;
+    const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+    await fetch(`${API_BASE}/document/export`, { method: "POST" });
+    window.location.href = `${API_BASE}/document/export-download?filename=${encodeURIComponent(exportName)}`;
   };
 
   return (
     <div style={{
       display: "flex",
       alignItems: "center",
-      gap: "8px",
-      padding: "8px 16px",
+      gap: "6px",
+      padding: "6px 12px",
       borderBottom: "1px solid var(--border)",
       background: "var(--bg-secondary)",
+      fontSize: "13px",
     }}>
-      <button onClick={toggleDarkMode} title="Toggle dark/light mode">
-        {darkMode ? "☀️" : "🌙"}
-      </button>
-      <span style={{ borderLeft: "1px solid #ccc", height: "20px", margin: "0 8px" }} />
+      {/* File dropdown menu */}
+      <div ref={fileMenuRef} style={{ position: "relative" }}>
+        <button
+          onClick={() => setFileMenuOpen(!fileMenuOpen)}
+          style={{
+            background: "transparent",
+            border: "none",
+            padding: "4px 10px",
+            cursor: "pointer",
+            fontWeight: 500,
+            fontSize: "13px",
+            borderRadius: "4px",
+            color: "var(--text-primary)",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary, #e8e8e8)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          File
+        </button>
+        {fileMenuOpen && (
+          <div style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            background: "var(--bg-primary, #fff)",
+            border: "1px solid var(--border, #ddd)",
+            borderRadius: "6px",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+            minWidth: "180px",
+            zIndex: 1000,
+            padding: "4px 0",
+          }}>
+            <MenuItem label="Upload & Index..." shortcut="Ctrl+U" onClick={() => { setFileMenuOpen(false); handleUploadClick(); }} />
+            <MenuDivider />
+            <MenuItem label="Save Session" shortcut="Ctrl+S" onClick={handleSave} disabled={!documentLoaded} />
+            <MenuItem label="Export PDF..." onClick={handleExport} disabled={!documentLoaded} />
+            <MenuDivider />
+            <MenuItem label="Undo" shortcut="Ctrl+Z" onClick={() => { setFileMenuOpen(false); undo(); }} disabled={!canUndo} />
+            <MenuItem label="Redo" shortcut="Ctrl+Y" onClick={() => { setFileMenuOpen(false); redo(); }} disabled={!canRedo} />
+          </div>
+        )}
+      </div>
+
+      <span style={{ borderLeft: "1px solid var(--border, #ccc)", height: "20px" }} />
+
+      {/* Hidden file input for upload */}
       <input
-        ref={fileInputRef}
+        ref={uploadInputRef}
         type="file"
         accept=".pdf"
         style={{ display: "none" }}
-        onChange={handleFileSelected}
+        onChange={handleUploadSelected}
       />
-      <button onClick={handleOpen}>Open</button>
+
+      {/* Open indexed document dropdown */}
       {availableDocs.length > 0 && (
-        <select
-          value={documentPath || ""}
-          onChange={(e) => e.target.value && handleDocSwitch(e.target.value)}
-          style={{
-            fontSize: "12px",
-            padding: "4px 6px",
-            borderRadius: "4px",
-            border: "1px solid var(--border)",
-            maxWidth: "180px",
-            background: "var(--bg-primary)",
-            color: "var(--text-primary)",
-          }}
-          title="Switch between indexed documents"
-        >
-          <option value="">— Select Document —</option>
-          {availableDocs.map((doc) => (
-            <option key={doc.path} value={doc.path}>
-              {doc.indexed ? "●" : "○"} {doc.filename}
-            </option>
-          ))}
-        </select>
+        <>
+          <select
+            value={documentPath || ""}
+            onChange={(e) => e.target.value && handleDocSwitch(e.target.value)}
+            style={{
+              fontSize: "12px",
+              padding: "4px 8px",
+              borderRadius: "4px",
+              border: "1px solid var(--border)",
+              maxWidth: "200px",
+              background: "var(--bg-primary)",
+              color: "var(--text-primary)",
+            }}
+            title="Open an indexed document"
+          >
+            <option value="">— Open Document —</option>
+            {availableDocs.map((doc) => (
+              <option key={doc.path} value={doc.path}>
+                {doc.filename}
+              </option>
+            ))}
+          </select>
+        </>
       )}
-      <button onClick={handleSave} disabled={!documentLoaded}>Save</button>
-      <button onClick={handleExport} disabled={!documentLoaded}>Export PDF</button>
-      <span style={{ borderLeft: "1px solid #ccc", height: "20px", margin: "0 8px" }} />
-      <button onClick={undo} disabled={!canUndo}>Undo</button>
-      <button onClick={redo} disabled={!canRedo}>Redo</button>
-      <span style={{ borderLeft: "1px solid #ccc", height: "20px", margin: "0 8px" }} />
-      {documentLoaded && (
-        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+
+      <span style={{ borderLeft: "1px solid var(--border, #ccc)", height: "20px", margin: "0 4px" }} />
+
+      {/* Theme toggle */}
+      <button onClick={toggleDarkMode} title="Toggle dark/light mode">
+        {darkMode ? "☀️" : "🌙"}
+      </button>
+
+      {/* Spacer */}
+      <span style={{ flex: 1 }} />
+
+      {/* Edit count */}
+      {documentLoaded && editCount > 0 && (
+        <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
           {editCount} edit{editCount !== 1 ? "s" : ""}
         </span>
       )}
-      <span style={{ flex: 1 }} />
     </div>
   );
+}
+
+/* ─── Menu Components ───────────────────────────────────────── */
+
+function MenuItem({ label, shortcut, onClick, disabled }: {
+  label: string;
+  shortcut?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        width: "100%",
+        padding: "6px 14px",
+        border: "none",
+        background: "transparent",
+        cursor: disabled ? "default" : "pointer",
+        fontSize: "12px",
+        color: disabled ? "var(--text-disabled, #aaa)" : "var(--text-primary)",
+        textAlign: "left",
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled) e.currentTarget.style.background = "var(--bg-tertiary, #f0f0f0)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <span>{label}</span>
+      {shortcut && (
+        <span style={{ fontSize: "11px", color: "var(--text-secondary, #999)", marginLeft: "20px" }}>
+          {shortcut}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function MenuDivider() {
+  return <div style={{ height: "1px", background: "var(--border, #e0e0e0)", margin: "4px 0" }} />;
 }

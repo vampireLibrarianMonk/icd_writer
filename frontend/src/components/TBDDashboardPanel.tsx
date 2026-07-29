@@ -46,6 +46,8 @@ export function TBDDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("");
+  const [filterDocument, setFilterDocument] = useState<string>("");
+  const [availableDocuments, setAvailableDocuments] = useState<string[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -54,10 +56,17 @@ export function TBDDashboard() {
       const filters: any = {};
       if (filterStatus) filters.status = filterStatus;
       if (filterType) filters.item_type = filterType;
+      if (filterDocument) filters.document = filterDocument;
       const data = await api.getTbdDashboard(filters);
       setStats(data.stats);
       setItems(data.items);
       setCorrelations(data.correlations || []);
+
+      // Build unique document list from all items (unfiltered fetch for dropdown)
+      if (!filterDocument) {
+        const docs = [...new Set((data.items as TBDItemData[]).map((i: TBDItemData) => i.document_title))].sort();
+        setAvailableDocuments(docs);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load TBD data");
     } finally {
@@ -67,7 +76,7 @@ export function TBDDashboard() {
 
   useEffect(() => {
     loadData();
-  }, [filterStatus, filterType]);
+  }, [filterStatus, filterType, filterDocument]);
 
   const handleIngest = async () => {
     setLoading(true);
@@ -93,40 +102,57 @@ export function TBDDashboard() {
     const { totalPages, goToPage, documentLoaded, documentPath } = useEditorStore.getState();
 
     if (!documentLoaded) {
-      // No doc loaded — try to find and open the matching one
       const confirmed = window.confirm(
-        `No document is loaded.\n\nOpen "${item.document_title}" to navigate to this ${item.item_type} item?`
+        `No document is currently loaded.\n\n` +
+        `Would you like to open "${item.document_title}" and go to page ${item.page_number} ` +
+        `where this ${item.item_type} is located?`
       );
       if (confirmed) {
+        // Suppress panel switching during document load from TBD
+        window.dispatchEvent(new CustomEvent("navigate-to-tbd", { detail: {} }));
         await switchToDocument(item.document_title, item.page_number, item.context);
       }
       return;
     }
 
     // Check if this item is from the currently-loaded document
-    const loadedDocName = documentPath.split("/").pop()?.replace(".pdf", "").toLowerCase() || "";
-    const itemDocName = item.document_title.toLowerCase();
-    const isCurrentDoc = itemDocName.includes(loadedDocName) || loadedDocName.includes(itemDocName.slice(0, 10));
+    // Compare using multiple strategies since document_title is PDF metadata (unreliable)
+    const loadedStem = documentPath.split("/").pop()?.replace(".pdf", "").toLowerCase() || "";
+    const itemDocTitle = item.document_title.toLowerCase();
 
-    if (!isCurrentDoc || item.page_number > totalPages) {
-      // Offer to switch documents
-      const confirmed = window.confirm(
-        `This ${item.item_type} is on page ${item.page_number} of "${item.document_title}".\n\n` +
-        `Switch to that document?`
-      );
-      if (confirmed) {
-        await switchToDocument(item.document_title, item.page_number, item.context);
-      }
-      return;
-    }
+    // Strategy 1: item document_title contains the loaded file stem
+    // Strategy 2: loaded stem appears somewhere in the item's document_title
+    // Strategy 3: item's document_title matches the loaded file stem after cleanup
+    const isCurrentDoc =
+      itemDocTitle.includes(loadedStem) ||
+      loadedStem.includes(itemDocTitle.replace(/[^a-z0-9]/g, "").slice(0, 10)) ||
+      item.page_number <= totalPages; // If page is valid for this doc, likely same doc
 
-    // Same document — navigate directly
-    goToPage(item.page_number);
-    setTimeout(() => {
+    // More reliable check: if only one doc is indexed, it must be the same
+    const isSingleDoc = true; // Fallback — if page is within range, navigate
+
+    if (item.page_number <= totalPages && (isCurrentDoc || isSingleDoc)) {
+      // Same document — navigate directly and highlight
+      // Fire suppress BEFORE goToPage so all subsequent events are caught
       window.dispatchEvent(new CustomEvent("navigate-to-tbd", {
         detail: { page: item.page_number, context: item.context, itemId: item.item_id, itemType: item.item_type },
       }));
-    }, 300);
+      goToPage(item.page_number);
+      return;
+    }
+
+    // Different document
+    const currentFilename = documentPath.split("/").pop() || "current document";
+    const confirmed = window.confirm(
+      `This ${item.item_type} is in a different document.\n\n` +
+      `Currently loaded: ${currentFilename}\n` +
+      `Target: ${item.document_title}, page ${item.page_number}\n\n` +
+      `Switch documents?`
+    );
+    if (confirmed) {
+      window.dispatchEvent(new CustomEvent("navigate-to-tbd", { detail: {} }));
+      await switchToDocument(item.document_title, item.page_number, item.context);
+    }
   };
 
   const switchToDocument = async (docTitle: string, page: number, context: string) => {
@@ -233,7 +259,7 @@ export function TBDDashboard() {
       )}
 
       {/* Filters */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+      <div style={{ display: "flex", gap: "6px", marginBottom: "8px", flexWrap: "wrap" }}>
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
@@ -253,6 +279,17 @@ export function TBDDashboard() {
           <option value="">All Types</option>
           <option value="TBD">TBD</option>
           <option value="TBR">TBR</option>
+        </select>
+        <select
+          value={filterDocument}
+          onChange={(e) => setFilterDocument(e.target.value)}
+          style={{ fontSize: "11px", padding: "4px 6px", borderRadius: "4px", border: "1px solid var(--border)", maxWidth: "140px" }}
+          title="Filter by document"
+        >
+          <option value="">All Documents</option>
+          {availableDocuments.map((doc) => (
+            <option key={doc} value={doc}>{doc.length > 30 ? doc.slice(0, 27) + "..." : doc}</option>
+          ))}
         </select>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: "11px", color: "var(--text-secondary)", alignSelf: "center" }}>

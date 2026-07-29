@@ -152,7 +152,7 @@ class ModelRegistry:
     def _load_registry(self) -> None:
         """Load previously saved registry state."""
         if self.registry_path.exists():
-            data = json.loads(self.registry_path.read_text())
+            data = json.loads(self.registry_path.read_text(encoding="utf-8"))
             for model_data in data.get("models", []):
                 info = ModelInfo(**model_data)
                 self._known_models[info.model_id] = info
@@ -194,7 +194,7 @@ class ModelRegistry:
                 for m in self._known_models.values()
             ],
         }
-        self.registry_path.write_text(json.dumps(data, indent=2))
+        self.registry_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def check_availability(self) -> AvailabilityReport:
         """Probe Bedrock for current embedding model availability.

@@ -430,7 +430,7 @@ def _cmd_ocr_ingest(args) -> None:
 
     # Save review flags
     if review_flags:
-        with open(out.review_flags_path, "w") as f:
+        with open(out.review_flags_path, "w", encoding="utf-8") as f:
             f.write(f"# Human Review Flags: {pdf_path.name}\n\n")
             f.write(f"Total flags: {len(review_flags)}\n\n")
             f.write("| Page | Reason | Candidates | Confidence |\n")
@@ -446,7 +446,7 @@ def _cmd_ocr_ingest(args) -> None:
         print("  Review flags: 0 (all high confidence)")
 
     # Save cost report
-    with open(out.ocr_cost_path, "w") as f:
+    with open(out.ocr_cost_path, "w", encoding="utf-8") as f:
         f.write(f"# OCR Cost Report: {pdf_path.name}\n\n")
         f.write(cost_tracker.summary())
 
@@ -701,7 +701,7 @@ def _cmd_version_diff(args) -> None:
     if args.output:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(output)
+        out_path.write_text(output, encoding="utf-8")
         print(f"Report saved: {out_path}")
     else:
         print(output)

@@ -118,7 +118,7 @@ class TBDDashboard:
     def _load_state(self) -> None:
         """Load persisted dashboard state."""
         if self.state_path.exists():
-            data = json.loads(self.state_path.read_text())
+            data = json.loads(self.state_path.read_text(encoding="utf-8"))
             for item_data in data.get("items", []):
                 item = TBDItem(**{k: v for k, v in item_data.items()
                                   if k in TBDItem.__dataclass_fields__})
@@ -169,7 +169,7 @@ class TBDDashboard:
                 for c in self._correlations
             ],
         }
-        self.state_path.write_text(json.dumps(data, indent=2))
+        self.state_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def ingest_document(self, ir_path: str | Path) -> int:
         """Extract TBD items from a Document IR and add to dashboard.
@@ -181,14 +181,18 @@ class TBDDashboard:
         from src.models.document_ir import DocumentIR
 
         ir_path = Path(ir_path)
-        with open(ir_path) as f:
+        with open(ir_path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
 
         # Load as DocumentIR
         doc_ir = DocumentIR.model_validate(raw)
         metadata = raw.get("metadata", {})
         doc_hash = metadata.get("sha256", ir_path.stem)
-        doc_title = metadata.get("title", metadata.get("filename", ir_path.stem))
+        # Use filename (stem of IR path) as the document title for display
+        # PDF metadata titles are often garbage (section headings, "Microsoft Word - ...")
+        doc_title = metadata.get("filename", ir_path.stem.replace("_document_ir", ""))
+        if not doc_title or doc_title.startswith("Microsoft Word"):
+            doc_title = ir_path.stem.replace("_document_ir", "")
 
         # Extract using existing tracker
         tbx_items = scan_document(doc_ir)

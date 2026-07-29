@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 export interface TextBlock {
   id: string;
@@ -23,6 +23,24 @@ export interface SessionInfo {
   document: string;
   edit_count: number;
   action_count: number;
+}
+
+export interface IngestStatus {
+  ingest_id: string;
+  filename: string;
+  pdf_path: string;
+  status: "uploading" | "extracting" | "indexing" | "detecting_tbds" | "done" | "error";
+  step: number;
+  total_steps: number;
+  message: string;
+  progress_pct: number;
+  pages: number;
+  text_blocks: number;
+  chunks_indexed: number;
+  tbd_count: number;
+  tbr_count: number;
+  error: string | null;
+  done: boolean;
 }
 
 export const api = {
@@ -153,6 +171,43 @@ export const api = {
     const res = await fetch(`${API_BASE}/tbd-dashboard/item/${encodeURIComponent(itemId)}?${params}`, {
       method: "PUT",
     });
+    return res.json();
+  },
+
+  // ─── Document Ingestion (Upload + Full Pipeline) ───────────
+
+  ingestDocument(
+    file: File,
+    onUploadProgress?: (pct: number) => void
+  ): Promise<{ ingest_id: string; status: string; filename: string }> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${API_BASE}/document/ingest`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onUploadProgress) {
+          onUploadProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error("Network error during upload"));
+
+      const formData = new FormData();
+      formData.append("file", file);
+      xhr.send(formData);
+    });
+  },
+
+  async getIngestStatus(ingestId: string): Promise<IngestStatus> {
+    const res = await fetch(`${API_BASE}/document/ingest/status/${ingestId}`);
     return res.json();
   },
 };

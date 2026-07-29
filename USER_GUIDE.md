@@ -2,275 +2,267 @@
 
 **Version 1.1.0**
 
-A walkthrough of the ICD Writer application using the included NASA Interface Control Documents.
-
 ---
 
 ## Prerequisites
 
-Start the full application stack:
+Start the application:
 
 ```bash
 docker compose up -d
 ```
 
-Wait for all services to be healthy (~30 seconds), then open:
+Wait ~30 seconds for all services to become healthy, then open http://localhost:3000.
 
-- **Application**: http://localhost:3000
-- **API Docs**: http://localhost:8000/docs
-- **OpenSearch Dashboard**: http://localhost:5601
+AWS credentials must be configured (`~/.aws/credentials`) for search indexing and RAG features.
 
 ---
 
-## 1. Uploading and Indexing a Document
+## 1. Upload and Indexing
 
-The first step is uploading a PDF so the system can extract its structure, index it for search, and detect TBD/TBR items.
+Upload a PDF to extract its structure, index it for search, and detect TBD/TBR items.
 
-### Steps
+### Document: `20130010957.pdf` (TSAFE ICD, 15 pages)
 
-1. Click **File** in the top-left menu bar
-2. Select **Upload & Index...**
-3. Choose a PDF from the `icds/digital/` folder — start with `20130010957.pdf` (TSAFE ICD, 15 pages, small and fast)
-4. The **progress modal** appears showing the pipeline stages:
-   - **Uploading PDF** — file transfer to backend
-   - **Extracting text & structure** — PDF parsed into structured Document IR
-   - **Indexing into OpenSearch** — text chunked, embedded via AWS Bedrock, stored in 4 search configurations
-   - **Detecting TBD/TBR items** — scans for unresolved items
-   - **Complete** — shows summary: pages, text blocks, chunks indexed, TBD/TBR counts
-5. The document automatically opens in the viewer
+**Steps:**
 
-### What Happens Behind the Scenes
+1. Click **File > Upload & Index...**
+2. Select `icds/digital/20130010957.pdf`
+3. The progress modal appears with live status updates:
 
-| Stage | What it does | Output |
-|-------|-------------|--------|
-| Extract | PyMuPDF parses the PDF into text blocks with bounding boxes, fonts, reading order | `output/<stem>_document_ir.yaml` |
-| Index | Text is chunked (paragraph, section, sliding window), embedded via Amazon Titan V2, stored in OpenSearch | 4 search indices |
-| TBD Scan | Regex + context analysis finds TBD/TBR/TBC markers | Items added to TBD Dashboard |
+| Step | Status Message | What's Happening |
+|------|---------------|-----------------|
+| 1 | Uploading PDF | File transferred to backend |
+| 2 | Extracting text & structure | PyMuPDF parses 15 pages into 81 text blocks |
+| 3 | Indexing titan-v2-paragraph: embedding chunk 42/86 | Each chunk embedded via AWS Bedrock, stored in OpenSearch |
+| 4 | Detecting TBD/TBR items | Regex + context scan for unresolved markers |
+| 5 | Complete! 15 pages, 215 chunks indexed, 0 TBDs | Summary of what was processed |
 
-### Recommended Demo Order
+4. Click **Open Document** — the PDF loads in the viewer
+5. The document now appears in the **Open Document** dropdown for future sessions
 
-| Document | Pages | Description | Notable Features |
-|----------|-------|-------------|-----------------|
-| `20130010957.pdf` | 15 | TSAFE Interface Control Document | Fast to index, good for search demo |
-| `HSI_SYS_015G.pdf` | 8 | HSI Spectrometer ICD | Contains TBR items, thermal requirements |
-| `20150010976.pdf` | 35 | LVC (Live Virtual Constructive) ICD | TBD items, larger doc, message definitions |
-| `IDSS_IDD_RevE.pdf` | ~100 | IDSS Docking System IDD Rev E | Large doc, version diff with Rev F |
-| `IDSS_IDD_RevF.pdf` | ~100 | IDSS Docking System IDD Rev F | Pair with Rev E for diff comparison |
-| `ICESat2_ATL03.pdf` | ~150 | ICESat-2 ATL03 Algorithm Document | Very large, tests scalability |
-| `NDS_IDD_RevC.pdf` | ~100 | NASA Docking System IDD | Thermal, electrical, data interfaces |
+**Expected result:** The document is searchable, viewable, and editable. The dropdown shows `20130010957.pdf`.
 
 ---
 
-## 2. Opening an Indexed Document
+## 2. Search and RAG
 
-Once a document has been indexed, it appears in the **Open Document** dropdown in the toolbar.
+Ask natural language questions across all indexed documents. Answers come with citations.
 
-1. Click the **— Open Document —** dropdown
-2. Select any previously indexed document
-3. The viewer loads with the PDF rendered page-by-page on the left and the editing panel on the right
+### Document: `20130010957.pdf` (must be indexed from Step 1)
+
+**Steps:**
+
+1. Click the **Search** tab (right panel)
+2. RAG mode is on by default (toggle visible above the input)
+3. Type a query and press Enter
+
+### Queries to Try
+
+| Query | Expected Answer |
+|-------|----------------|
+| "What triggers a conflict check in TSAFE?" | Track Update, Vector, and Altitude Amendments (cites page 8) |
+| "What is the input data format from radar?" | Radar data interface specification |
+| "How does TSAFE predict trajectories?" | Trajectory prediction algorithm details |
+
+**What you'll see:**
+
+- A synthesized answer (not just raw results)
+- Inline citations: `[1] Document, Section, Page`
+- Confidence indicator (high/medium/low)
+- Cost and timing metadata
+
+**Toggle RAG off** to see raw search hits instead — ranked chunks with scores, page numbers, and text previews.
 
 ---
 
-## 3. Viewing and Navigating
+## 3. TBD/TBR Tracking
 
-### Document Viewer (Left Panel)
+Track unresolved items across all indexed documents with status management.
 
-- **Page navigation**: Use the page controls at the top of the viewer (Previous / Next / page number input)
-- **Element highlighting**: Hover over text blocks to see their bounding boxes; click to select for editing
-- **Zoom**: The page renders at 150 DPI for readability
+### Document: `HSI_SYS_015G.pdf` (HSI Spectrometer, 8 pages — has TBR items)
 
-### Right Panel Tabs
+**Steps:**
 
-| Tab | Purpose |
-|-----|---------|
-| **Editor** | Edit selected text blocks, undo/redo |
-| **Search** | Semantic search + RAG across all indexed documents |
-| **TBDs** | Cross-document TBD/TBR tracking dashboard |
-| **Diff** | Version comparison between related documents |
+1. **File > Upload & Index...** → select `icds/digital/HSI_SYS_015G.pdf`
+2. Wait for ingestion to complete (fast — 8 pages)
+3. Click the **TBDs** tab (right panel)
+4. Click **Refresh** if the dashboard is empty
+
+**Expected result:**
+
+- 2 TBR items appear: `TBR-UCB-102` (page 5) and `TBR-UCB-110` (page 7)
+- Stats cards show: 2 Open, 0 Assigned, 0 Resolved
+- The "in shall statements" warning appears (these TBRs are contractually blocking)
+
+### Using the Filters
+
+| Filter | Action | Result |
+|--------|--------|--------|
+| Document: `HSI_SYS_015G.pdf` | Shows only HSI items | 2 items |
+| Type: TBR | Shows only TBR items | Filters out any TBDs |
+| Status: Open | Default — shows unresolved items | All items initially |
+
+### Navigating to a TBD Item
+
+1. Click any TBR item row
+2. The document viewer jumps to that page and highlights the element
+3. The right panel **stays on the TBD tab** (doesn't switch to Editor)
+
+### Changing Status
+
+Use the status dropdown on each item to track progress: Open → Assigned → Resolved → Verified.
 
 ---
 
-## 4. Editing Text
+## 4. Editing and Page Extension
 
-1. Click on any text block in the document viewer — it highlights in blue
-2. The **Editor** tab activates with the selected text
-3. Edit the text in the editing area
-4. Click **Apply** to save the change
-5. The document view updates immediately
-6. Use **Undo/Redo** (File menu or Ctrl+Z/Ctrl+Y) to revert
+Edit text blocks directly in the PDF. If edits overflow a page, the system creates a new page.
 
-### Page Extension (Automatic)
+### Document: `HSI_SYS_015G.pdf` (already loaded from Step 3)
 
-When an edit makes a text block long enough to push content past the bottom of the page, the system automatically creates a new page:
+**Steps — Basic Edit:**
 
-1. Open `HSI_SYS_015G.pdf` and navigate to **page 4**
-2. Click any paragraph block in the body area
-3. Replace the text with a very long passage (e.g., paste the same sentence 50+ times)
-4. Click **Apply**
-5. The response will show:
-   - `page_added: true` — a new page was created
-   - `new_page_number` — the inserted page number
-   - `total_pages` — the updated document length
-6. Navigate to the new page — it contains the overflowing paragraph blocks
+1. Navigate to **page 4** using the page controls
+2. Click any paragraph block in the body area — it highlights in blue
+3. The **Editor** tab activates with the selected text
+4. Modify the text (e.g., change a value or add a sentence)
+5. Click **Apply** — the document view updates immediately
+6. **File > Undo** (or Ctrl+Z) reverts the change
 
-**How it works:**
-- The reflow engine calculates word-wrap height for the edited block
-- Subsequent blocks are shifted down to accommodate the new height
-- If any paragraph block's bottom edge exceeds the page margin (72pt from bottom), the system:
-  - Creates a new page with the same dimensions
-  - Moves all overflowing paragraph blocks to the new page
-  - Repositions them starting at the top margin
-  - Renumbers all subsequent pages
-- Headers and footers are never moved
-- Export PDF includes the new pages rendered from the document structure
+**Steps — Triggering Page Extension:**
 
-**Currently supported block types for page extension:**
-- Paragraphs (Phase 1)
-- Tables (Phase 2)
-- Lists (Phase 2)
+1. On page 4, click a body paragraph block
+2. Replace the text with a very long passage:
+   ```
+   The spectrometer thermal requirement shall be verified under all operating conditions.
+   ```
+   (Paste this sentence 50+ times to create a massive block)
+3. Click **Apply**
+4. Observe:
+   - The total page count increases (shown in the status bar)
+   - The API response shows `page_added: true`
+   - Navigate to the new page — it contains the overflowing content
 
-### Exporting
+**What moves to the new page:**
+- Paragraph blocks that overflow the bottom margin
+- List items and captions
+- Tables that extend past the boundary
 
-After making edits:
-1. **File > Export PDF...** generates a new PDF with your changes applied
-2. The browser downloads the edited PDF
-3. If pages were added during editing, the exported PDF will include those additional pages
+**What stays:**
+- Headers and footers (fixed position)
+- Section headings (anchor the page structure)
+
+---
+
+## 5. Version Comparison
+
+Compare two revisions of the same document to identify what changed.
+
+### Documents: `IDSS_IDD_RevE.pdf` + `IDSS_IDD_RevF.pdf`
+
+**Steps:**
+
+1. **File > Upload & Index...** → select `icds/digital/IDSS_IDD_RevE.pdf`
+2. Wait for ingestion (~100 pages, takes longer)
+3. **File > Upload & Index...** → select `icds/digital/IDSS_IDD_RevF.pdf`
+4. Wait for ingestion
+5. Open `IDSS_IDD_RevF.pdf` from the **Open Document** dropdown
+6. Click the **Diff** tab — it automatically detects Rev E as a related version
+7. Click **Compare** next to Rev E
+
+**Expected result:**
+
+The diff summary shows:
+- Sections modified / added / removed
+- Requirement changes (flagged with ⚠️)
+- TBD changes
+- Text overlap percentage
+- Estimated AI summary cost
+
+**Per-section details:**
+
+Each changed section is expandable:
+- **Orange border** = modified
+- **Green border** = added
+- **Red border** = removed
+
+Click a section to see old vs. new text. Click **Summarize with AI** for a plain-English explanation of what changed (small per-section cost).
+
+### Change Classifications
+
+| Icon | Classification | Example |
+|------|---------------|---------|
+| ⚠️ | Technical | Requirement value changed |
+| 🔧 | Structural | Section reorganized or split |
+| 📝 | Editorial | Wording or formatting change |
+
+---
+
+## 6. Exporting
+
+Generate a PDF with all your edits applied.
+
+### Steps:
+
+1. Make edits to the loaded document (any document)
+2. **File > Export PDF...**
+3. The browser downloads `<filename>_edited.pdf`
+4. If pages were added during editing, they're included in the export
+
+**Note:** Pages without edits are copied pixel-perfect from the source. Only edited pages go through re-rendering.
+
+---
+
+## 7. Document Management
 
 ### Removing a Document
 
-To completely remove a document from the system:
-
 1. Open the document from the dropdown
 2. **File > Remove Document...**
-3. A confirmation dialog shows what will be removed:
-   - All search index data from OpenSearch
-   - The extracted document structure (IR file)
-   - Associated TBD/TBR items from the dashboard
-4. Click OK to confirm
-5. The document disappears from the dropdown and all related data is purged
+3. Confirmation dialog shows what will be removed:
+   - Search index data (all OpenSearch chunks)
+   - Extracted document structure (IR file)
+   - Associated TBD/TBR items
+4. Click OK
+5. The document disappears from the dropdown
 
-**Note:** Original PDFs in `icds/digital/` are never deleted (source-controlled). Only uploaded PDFs in `uploads/` are removed from disk.
-
----
-
-## 5. Semantic Search (Search Tab)
-
-Search across all indexed documents using natural language.
-
-### Example Queries for Demo
-
-With `20130010957.pdf` (TSAFE) indexed:
-
-| Query | What it finds |
-|-------|--------------|
-| "What triggers a conflict check in TSAFE?" | Track Update, Vector, and Altitude Amendments |
-| "conflict detection algorithm" | Algorithm description and parameters |
-| "input data format from radar" | Radar data interface specification |
-
-With `HSI_SYS_015G.pdf` indexed:
-
-| Query | What it finds |
-|-------|--------------|
-| "thermal operating limits for the spectrometer" | Temperature ranges and constraints |
-| "heater circuit specifications" | Heater power, thermostat settings |
-| "detector characteristics" | Germanium detector specs |
-
-With `20150010976.pdf` (LVC) indexed:
-
-| Query | What it finds |
-|-------|--------------|
-| "What is the message code for MsgFlightState?" | Message code 5310 |
-| "What interfaces does the LVC system provide?" | Message and packet interfaces |
-| "What are the TBD items?" | Wind direction, wind speed fields |
-
-### RAG Mode
-
-Toggle **RAG** on (enabled by default) to get synthesized answers with citations instead of raw search results. The AI:
-- Only answers from retrieved content (no hallucination)
-- Cites source document, section, and page for every claim
-- Preserves "shall" statement wording verbatim
-- Notes TBD items explicitly
-- Includes a confidence indicator (high/medium/low)
+**Note:** PDFs in `icds/digital/` are never deleted from disk (source-controlled). Only uploaded PDFs in `uploads/` are removed.
 
 ---
 
-## 6. TBD Dashboard (TBDs Tab)
+## 8. Additional Features
 
-Tracks all TBD, TBR, TBC, and TBS items across every indexed document.
+### Dark Mode
 
-### Walkthrough
+Click **🌙** in the toolbar to toggle. All panels including Diff tab callouts adapt.
 
-1. Click the **TBDs** tab
-2. If empty, click **Refresh** to scan all indexed documents
-3. Use the three filter dropdowns:
-   - **Status**: Open / Assigned / Resolved / Verified
-   - **Type**: TBD / TBR
-   - **Document**: Filter to a specific document
-4. Click any item to navigate to its location in the document (page jumps, element highlights)
-5. Change item status via the dropdown on each row (track resolution progress)
+### Search Across Multiple Documents
 
-### What Gets Detected
+Once multiple documents are indexed, search queries return results from all of them. RAG answers synthesize across documents with per-source citations.
 
-- `TBD` — To Be Determined (value not yet known)
-- `TBR` — To Be Reviewed (value needs verification)
-- `TBC` — To Be Confirmed
-- `TBS` — To Be Supplied
+### Cross-Document TBD Correlation
 
-Items in "shall" statements are flagged as contractually blocking.
-
-### Cross-Document Correlation
-
-When multiple documents are indexed, the dashboard identifies:
+With multiple documents indexed, the TBD dashboard can identify:
 - Related TBD items across documents (same topic, different docs)
 - Conflicts (same item resolved differently in different documents)
 
 ---
 
-## 7. Version Diff (Diff Tab)
-
-Compare two versions of the same document to identify what changed.
-
-### Demo with IDSS IDD
-
-1. Upload and index both `IDSS_IDD_RevE.pdf` and `IDSS_IDD_RevF.pdf`
-2. Open `IDSS_IDD_RevF.pdf` from the dropdown
-3. The **Diff** tab automatically detects Rev E as a related version
-4. Click **Compare** next to Rev E
-5. The diff shows:
-   - **Summary**: counts of modified/added/removed sections, requirement changes, TBD changes
-   - **Per-section diffs**: expandable rows showing old vs new text
-   - **AI Summarize**: click to get an AI explanation of what changed in each section (small cost per section)
-
-### Change Classifications
-
-| Icon | Classification | Meaning |
-|------|---------------|---------|
-| ⚠️ | Technical | Requirement or interface change |
-| 🔧 | Structural | Section reorganization |
-| 📝 | Editorial | Wording/formatting change |
-
----
-
-## 8. Dark Mode
-
-Click the **🌙** button in the toolbar to toggle dark mode. All panels, including the Diff tab callouts, adapt to the dark theme.
-
----
-
-## 9. Architecture Overview
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │  Browser (localhost:3000)                            │
 │  React + Vite → nginx                              │
 └──────────────────────┬──────────────────────────────┘
-                       │ /session, /document, /search,
-                       │ /tbd-dashboard, /documents
+                       │
         ┌──────────────▼──────────────┐
         │  Backend (localhost:8000)     │
         │  FastAPI + Uvicorn           │
         │  - PDF extraction (PyMuPDF)  │
         │  - Rendering (WeasyPrint)    │
+        │  - Text reflow + page split  │
         │  - Search (OpenSearch + kNN) │
         │  - RAG (Bedrock Nova Pro)    │
         │  - TBD tracking              │
@@ -293,54 +285,27 @@ Click the **🌙** button in the toolbar to toggle dark mode. All panels, includ
 
 ---
 
-## 10. CLI Commands (Advanced)
-
-The backend also exposes a CLI for batch operations:
-
-```bash
-# Ingest a PDF into Document IR
-docker run --rm -v ./icds:/app/icds -v ./output:/app/output icd_writer-backend \
-  python -m src.cli ingest icds/digital/20130010957.pdf
-
-# Search from command line
-docker run --rm --network icd_writer_default icd_writer-backend \
-  python -m src.cli search "conflict detection" --mode rrf -k 5
-
-# Run search evaluation benchmark
-docker run --rm --network icd_writer_default icd_writer-backend \
-  python -m src.cli search-eval
-
-# Check for new embedding models on Bedrock
-docker run --rm icd_writer-backend \
-  python -m src.cli search-models
-
-# Compare two document versions
-docker run --rm -v ./icds:/app/icds icd_writer-backend \
-  python -m src.cli version-diff icds/digital/IDSS_IDD_RevE.pdf icds/digital/IDSS_IDD_RevF.pdf
-```
-
----
-
 ## Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
 | "Failed to fetch" on search | Ensure OpenSearch is running: `docker compose ps` should show `icd-opensearch` healthy |
 | "No document loaded" on export | Open a document from the dropdown before exporting |
-| Upload progress stalls at "Indexing" | Check AWS credentials are configured (`~/.aws/credentials`) |
-| Documents not appearing in dropdown | Only indexed documents appear — upload via File > Upload & Index |
-| TBD dashboard empty | Click Refresh, or upload documents that contain TBD/TBR markers |
+| Upload stalls at "Indexing" | Check AWS credentials: `aws sts get-caller-identity` |
+| Documents not in dropdown | Only indexed documents appear — upload via File > Upload & Index |
+| TBD dashboard empty | Click Refresh after uploading documents with TBD/TBR markers |
+| Diff tab says "No related versions" | Both versions must be uploaded and indexed (not just on disk) |
 
 ---
 
-## Included Test Documents
+## Test Documents Reference
 
-| File | Source | Content |
-|------|--------|---------|
-| `20130010957.pdf` | NASA TM 2013-216034 | TSAFE (Tactical Separation Assisted Flight Environment) ICD V2.0 |
-| `20150010976.pdf` | NASA/TM-2015-218951 | LVC (Live Virtual Constructive) Gateway ICD |
-| `HSI_SYS_015G.pdf` | NASA/JPL | Hyperspectral Infrared Spectrometer System ICD |
-| `ICESat2_ATL03.pdf` | NASA GSFC | ICESat-2 ATL03 Geolocated Photon Algorithm |
-| `IDSS_IDD_RevE.pdf` | NASA | International Docking System Standard IDD Rev E |
-| `IDSS_IDD_RevF.pdf` | NASA | International Docking System Standard IDD Rev F |
-| `NDS_IDD_RevC.pdf` | NASA | NASA Docking System Interface Definition Document Rev C |
+| File | Pages | Content | Best For |
+|------|-------|---------|----------|
+| `20130010957.pdf` | 15 | TSAFE ICD (conflict detection) | Quick upload, search demo |
+| `HSI_SYS_015G.pdf` | 8 | Spectrometer ICD (thermal) | TBD/TBR tracking, editing |
+| `20150010976.pdf` | 35 | LVC Gateway ICD (messages) | TBD items, larger doc |
+| `IDSS_IDD_RevE.pdf` | ~100 | Docking System IDD Rev E | Version diff (pair with Rev F) |
+| `IDSS_IDD_RevF.pdf` | ~100 | Docking System IDD Rev F | Version diff (pair with Rev E) |
+| `ICESat2_ATL03.pdf` | ~150 | ATL03 Algorithm Document | Scalability testing |
+| `NDS_IDD_RevC.pdf` | ~100 | NASA Docking System IDD | Multi-interface search |

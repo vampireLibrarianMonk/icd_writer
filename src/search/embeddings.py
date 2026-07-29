@@ -41,8 +41,14 @@ class EmbeddingClient:
             "estimated_cost_usd": round(self.total_cost_usd, 6),
         }
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(self, texts: list[str],
+                    progress_callback=None) -> list[list[float]]:
         """Embed a batch of texts. Returns list of vectors.
+
+        Args:
+            texts: List of text strings to embed.
+            progress_callback: Optional callable(embedded_count, total_count)
+                called after each text is embedded.
 
         Note: Bedrock embedding models have per-call limits.
         Titan V2 supports up to 8192 tokens per text, batch of 1.
@@ -52,19 +58,20 @@ class EmbeddingClient:
             EmbeddingProvider.COHERE_ENGLISH,
             EmbeddingProvider.COHERE_MULTILINGUAL,
         ):
-            return self._embed_cohere(texts)
+            return self._embed_cohere(texts, progress_callback)
         else:
-            return self._embed_titan(texts)
+            return self._embed_titan(texts, progress_callback)
 
     def embed_text(self, text: str) -> list[float]:
         """Embed a single text. Returns one vector."""
         results = self.embed_texts([text])
         return results[0]
 
-    def _embed_titan(self, texts: list[str]) -> list[list[float]]:
+    def _embed_titan(self, texts: list[str], progress_callback=None) -> list[list[float]]:
         """Embed using Amazon Titan Text Embeddings V2."""
         vectors: list[list[float]] = []
-        for text in texts:
+        total = len(texts)
+        for idx, text in enumerate(texts):
             body = {
                 "inputText": text,
                 "dimensions": self.config.dimensions,
@@ -80,14 +87,17 @@ class EmbeddingClient:
             vectors.append(result["embedding"])
             self._total_tokens += result.get("inputTextTokenCount", len(text.split()))
             self._total_calls += 1
+            if progress_callback:
+                progress_callback(idx + 1, total)
         return vectors
 
-    def _embed_cohere(self, texts: list[str]) -> list[list[float]]:
+    def _embed_cohere(self, texts: list[str], progress_callback=None) -> list[list[float]]:
         """Embed using Cohere Embed models (supports batching)."""
         vectors: list[list[float]] = []
         # Cohere supports batches of 96, with max 2048 chars per text
         batch_size = 96
         max_chars = 2048
+        total = len(texts)
         for i in range(0, len(texts), batch_size):
             batch = [t[:max_chars] for t in texts[i:i + batch_size]]
             body = {
@@ -107,6 +117,8 @@ class EmbeddingClient:
             token_est = sum(len(t.split()) for t in batch)
             self._total_tokens += token_est
             self._total_calls += 1
+            if progress_callback:
+                progress_callback(min(i + batch_size, total), total)
         return vectors
 
     def embed_query(self, query: str) -> list[float]:

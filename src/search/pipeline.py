@@ -44,12 +44,15 @@ class SearchPipeline:
     # -----------------------------------------------------------------
 
     def ingest_document(self, ir_path: str | Path,
-                        configs: list[IndexConfig] | None = None) -> dict[str, int]:
+                        configs: list[IndexConfig] | None = None,
+                        progress_callback=None) -> dict[str, int]:
         """Ingest a Document IR file into all configured search indices.
 
         Args:
             ir_path: Path to YAML Document IR file
             configs: Specific configs to index into (default: all)
+            progress_callback: Optional callable(embedded_count, total_count)
+                forwarded to the embedding client for per-chunk progress.
 
         Returns:
             {index_name: chunks_indexed}
@@ -90,7 +93,7 @@ class SearchPipeline:
                 config.embedding_config, region=self.config.aws_region
             )
             texts = [c.text for c in chunk_result.chunks]
-            embeddings = embed_client.embed_texts(texts)
+            embeddings = embed_client.embed_texts(texts, progress_callback=progress_callback)
 
             # Index
             count = self.index_manager.index_chunks(

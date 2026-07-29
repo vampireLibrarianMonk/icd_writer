@@ -234,16 +234,32 @@ def create_app() -> FastAPI:
                 # Index per-config with progress updates
                 total_configs = len(ALL_CONFIGS)
                 index_results = {}
-                for i, cfg in enumerate(ALL_CONFIGS):
-                    pct = 50 + int((i / total_configs) * 25)
-                    status.update({
-                        "message": f"Indexing config {i + 1}/{total_configs}: {cfg.name}...",
-                        "progress_pct": pct,
-                    })
-                    result = pipeline.ingest_document(ir_path, configs=[cfg])
-                    index_results.update(result)
+                total_chunks_all_configs = 0
 
-                total_chunks = sum(index_results.values())
+                for i, cfg in enumerate(ALL_CONFIGS):
+                    config_base_pct = 50 + int((i / total_configs) * 25)
+                    config_pct_range = 25 // total_configs  # pct allocated per config
+                    status.update({
+                        "message": f"Indexing config {i + 1}/{total_configs}: {cfg.name} (chunking...)",
+                        "progress_pct": config_base_pct,
+                    })
+
+                    def make_progress_cb(base_pct, pct_range, config_name):
+                        """Create a closure for per-chunk progress updates."""
+                        def cb(embedded, total):
+                            chunk_pct = base_pct + int((embedded / total) * pct_range)
+                            status.update({
+                                "message": f"Indexing {config_name}: embedding chunk {embedded}/{total}",
+                                "progress_pct": chunk_pct,
+                            })
+                        return cb
+
+                    progress_cb = make_progress_cb(config_base_pct, config_pct_range, cfg.name)
+                    result = pipeline.ingest_document(ir_path, configs=[cfg], progress_callback=progress_cb)
+                    index_results.update(result)
+                    total_chunks_all_configs += sum(result.values())
+
+                total_chunks = total_chunks_all_configs
                 status.update({
                     "chunks_indexed": total_chunks,
                     "message": f"Indexed {total_chunks} chunks across {total_configs} configurations.",

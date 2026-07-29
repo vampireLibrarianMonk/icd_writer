@@ -1530,17 +1530,42 @@ def create_app() -> FastAPI:
                 for j in judgments
             ]
 
-        # Add expanded queries as a separate group
-        result["_expanded"] = [
-            {
-                "query_id": j.query_id,
-                "query": j.query,
-                "expected_terms": j.relevant_texts,
-                "expected_pages": j.relevant_pages,
-                "category": j.category,
-            }
-            for j in EXPANDED_QUERIES
-        ]
+        # Group expanded queries by document prefix (e.g., "lvc-006" → "20150010976")
+        prefix_to_doc = {
+            "lvc": "20150010976",
+            "hsi": "HSI_SYS_015G",
+            "tsafe": "20130010957",
+            "ice": "ICESat2_ATL03",
+            "idss": "IDSS_IDD_RevF",
+            "nds": "NDS_IDD_RevC",
+        }
+        for j in EXPANDED_QUERIES:
+            # Handle both "lvc-006" and "batch2_lvc_001" formats
+            qid = j.query_id
+            matched = False
+            for prefix, doc_key in prefix_to_doc.items():
+                if prefix in qid:
+                    if doc_key not in result:
+                        result[doc_key] = []
+                    result[doc_key].append({
+                        "query_id": j.query_id,
+                        "query": j.query,
+                        "expected_terms": j.relevant_texts,
+                        "expected_pages": j.relevant_pages,
+                        "category": j.category,
+                    })
+                    matched = True
+                    break
+            if not matched:
+                if "_other" not in result:
+                    result["_other"] = []
+                result["_other"].append({
+                    "query_id": j.query_id,
+                    "query": j.query,
+                    "expected_terms": j.relevant_texts,
+                    "expected_pages": j.relevant_pages,
+                    "category": j.category,
+                })
 
         return {
             "documents": result,
@@ -1548,10 +1573,86 @@ def create_app() -> FastAPI:
             "metrics_measured": [
                 "Recall@5 — Of correct results, how many appear in top 5?",
                 "Recall@10 — Of correct results, how many appear in top 10?",
-                "MRR (Mean Reciprocal Rank) — How high is the first correct result?",
-                "Precision@5 — Of top 5, how many are relevant?",
+                "Mean Reciprocal Rank (MRR) — On average, how high is the first correct result?",
+                "Precision@5 — Of the top 5 results, how many are actually relevant?",
+                "Hit Rate — Percentage of queries with at least one relevant result in top 10",
             ],
         }
+
+    @app.get("/search/evaluation-results")
+    def get_evaluation_results():
+        """Return the latest benchmark results if available."""
+        import json
+        results_dir = Path("tests/results/search_eval")
+
+        # Load the latest eval run
+        eval_files = sorted(results_dir.glob("eval_*.json"), reverse=True)
+        benchmark_files = sorted(results_dir.glob("benchmark_*.json"), reverse=True)
+
+        latest_eval = None
+        if eval_files:
+            with open(eval_files[0], encoding="utf-8") as f:
+                latest_eval = json.load(f)
+
+        latest_benchmark = None
+        if benchmark_files:
+            with open(benchmark_files[0], encoding="utf-8") as f:
+                latest_benchmark = json.load(f)
+
+        # Read the markdown summary
+        summary_path = results_dir / "BENCHMARK_RESULTS.md"
+        summary_md = ""
+        if summary_path.exists():
+            summary_md = summary_path.read_text(encoding="utf-8")
+
+        return {
+            "has_results": latest_eval is not None or latest_benchmark is not None,
+            "latest_eval": latest_eval,
+            "latest_benchmark": latest_benchmark,
+            "summary_markdown": summary_md,
+            "rankings": _extract_rankings(summary_md),
+            "key_findings": _extract_findings(summary_md),
+        }
+
+
+    def _extract_rankings(md: str) -> list[dict]:
+        """Parse the rankings table from the benchmark markdown."""
+        import re
+        rankings = []
+        in_rankings = False
+        for line in md.split("\n"):
+            if "| Rank |" in line:
+                in_rankings = True
+                continue
+            if in_rankings and line.startswith("|"):
+                if "---" in line:
+                    continue
+                parts = [p.strip().strip("*") for p in line.split("|")[1:-1]]
+                if len(parts) >= 5:
+                    try:
+                        rankings.append({
+                            "rank": int(parts[0]),
+                            "configuration": parts[1],
+                            "recall_at_10": parts[2],
+                            "mrr": parts[3],
+                            "hit_rate": parts[4],
+                            "latency": parts[5] if len(parts) > 5 else "",
+                        })
+                    except (ValueError, IndexError):
+                        pass
+            elif in_rankings and not line.startswith("|"):
+                break
+        return rankings
+
+    def _extract_findings(md: str) -> list[str]:
+        """Extract key finding headings from the benchmark markdown."""
+        import re
+        findings = []
+        for line in md.split("\n"):
+            match = re.match(r"^### \d+\.\s+(.+)", line)
+            if match:
+                findings.append(match.group(1))
+        return findings
 
     @app.post("/search")
     def search_documents(query: str, k: int = 10, mode: str = "rrf", rag: bool = False):

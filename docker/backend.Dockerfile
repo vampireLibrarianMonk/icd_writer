@@ -43,6 +43,7 @@ RUN pip install --no-cache-dir \
 COPY pyproject.toml .
 COPY src/ src/
 COPY schemas/ schemas/
+COPY tests/results/ tests/results/
 RUN pip install --no-cache-dir -e .
 
 # Create output directory for Document IR files

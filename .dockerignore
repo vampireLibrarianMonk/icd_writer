@@ -27,4 +27,7 @@ docker/
 
 # Docs (not needed in image)
 docs/
-*.md
+README.md
+USER_GUIDE.md
+CHANGELOG.md
+SBOM.md

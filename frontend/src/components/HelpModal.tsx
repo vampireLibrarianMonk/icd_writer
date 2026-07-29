@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
-type HelpTab = "how-it-works" | "evaluation" | "about";
+type HelpTab = "how-it-works" | "evaluation" | "results" | "about";
 
 interface EvalQuery {
   query_id: string;
@@ -18,6 +18,13 @@ interface EvalSuite {
   metrics_measured: string[];
 }
 
+interface EvalResults {
+  has_results: boolean;
+  rankings: { rank: number; configuration: string; recall_at_10: string; mrr: string; hit_rate: string; latency: string }[];
+  key_findings: string[];
+  summary_markdown: string;
+}
+
 interface HelpModalProps {
   initialTab?: HelpTab;
   onClose: () => void;
@@ -26,6 +33,7 @@ interface HelpModalProps {
 export function HelpModal({ initialTab = "how-it-works", onClose }: HelpModalProps) {
   const [activeTab, setActiveTab] = useState<HelpTab>(initialTab);
   const [evalData, setEvalData] = useState<EvalSuite | null>(null);
+  const [resultsData, setResultsData] = useState<EvalResults | null>(null);
 
   useEffect(() => {
     if (activeTab === "evaluation" && !evalData) {
@@ -34,7 +42,13 @@ export function HelpModal({ initialTab = "how-it-works", onClose }: HelpModalPro
         .then(setEvalData)
         .catch(() => {});
     }
-  }, [activeTab, evalData]);
+    if (activeTab === "results" && !resultsData) {
+      fetch(`${API_BASE}/search/evaluation-results`)
+        .then((r) => r.json())
+        .then(setResultsData)
+        .catch(() => {});
+    }
+  }, [activeTab, evalData, resultsData]);
 
   return (
     <div style={{
@@ -55,6 +69,7 @@ export function HelpModal({ initialTab = "how-it-works", onClose }: HelpModalPro
         <div style={{ display: "flex", borderBottom: "1px solid var(--border)", padding: "0 20px" }}>
           <TabButton label="How It Works" active={activeTab === "how-it-works"} onClick={() => setActiveTab("how-it-works")} />
           <TabButton label="Evaluation Suite" active={activeTab === "evaluation"} onClick={() => setActiveTab("evaluation")} />
+          <TabButton label="Evaluation Results" active={activeTab === "results"} onClick={() => setActiveTab("results")} />
           <TabButton label="About" active={activeTab === "about"} onClick={() => setActiveTab("about")} />
         </div>
 
@@ -62,6 +77,7 @@ export function HelpModal({ initialTab = "how-it-works", onClose }: HelpModalPro
         <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
           {activeTab === "how-it-works" && <HowItWorks />}
           {activeTab === "evaluation" && <EvaluationSuite data={evalData} />}
+          {activeTab === "results" && <EvaluationResults data={resultsData} />}
           {activeTab === "about" && <About />}
         </div>
       </div>
@@ -180,12 +196,12 @@ function EvaluationSuite({ data }: { data: EvalSuite | null }) {
     return <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>Loading evaluation data...</div>;
   }
 
-  const docKeys = Object.keys(data.documents).filter((k) => k !== "_expanded");
+  const docKeys = Object.keys(data.documents).sort();
 
   return (
     <div style={{ fontSize: "13px", color: "var(--text-primary)" }}>
       <p style={{ color: "var(--text-secondary)", marginBottom: "12px" }}>
-        The search quality is validated against <strong>{data.total_queries} ground truth queries</strong> across {docKeys.length} documents.
+        Search quality is validated against <strong>{data.total_queries} ground truth queries</strong> across {docKeys.length} documents.
         Each query has expected terms and page numbers that must appear in the top results.
       </p>
 
@@ -203,6 +219,7 @@ function EvaluationSuite({ data }: { data: EvalSuite | null }) {
       {docKeys.map((docKey) => {
         const queries = data.documents[docKey];
         const expanded = expandedDoc === docKey;
+        const categories = [...new Set(queries.map((q) => q.category))];
         return (
           <div key={docKey} style={{ marginBottom: "8px", border: "1px solid var(--border)", borderRadius: "6px" }}>
             <div
@@ -211,6 +228,9 @@ function EvaluationSuite({ data }: { data: EvalSuite | null }) {
             >
               <span>{expanded ? "▼" : "▶"}</span>
               <strong>{docKey}</strong>
+              <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>
+                {categories.join(", ")}
+              </span>
               <span style={{ color: "var(--text-secondary)", marginLeft: "auto" }}>{queries.length} queries</span>
             </div>
             {expanded && (
@@ -218,16 +238,17 @@ function EvaluationSuite({ data }: { data: EvalSuite | null }) {
                 <table style={{ width: "100%", fontSize: "11px", borderCollapse: "collapse", marginTop: "8px" }}>
                   <thead>
                     <tr style={{ textAlign: "left", borderBottom: "1px solid var(--border)" }}>
-                      <th style={{ padding: "4px 6px", width: "55px" }}>ID</th>
+                      <th style={{ padding: "4px 6px", width: "70px" }}>ID</th>
                       <th style={{ padding: "4px 6px" }}>Query</th>
                       <th style={{ padding: "4px 6px", width: "80px" }}>Category</th>
                       <th style={{ padding: "4px 6px" }}>Expected Terms</th>
+                      <th style={{ padding: "4px 6px", width: "50px" }}>Pages</th>
                     </tr>
                   </thead>
                   <tbody>
                     {queries.map((q) => (
                       <tr key={q.query_id} style={{ borderBottom: "1px solid var(--border-light, #eee)" }}>
-                        <td style={{ padding: "4px 6px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{q.query_id}</td>
+                        <td style={{ padding: "4px 6px", fontFamily: "monospace", color: "var(--text-secondary)", fontSize: "10px" }}>{q.query_id}</td>
                         <td style={{ padding: "4px 6px" }}>{q.query}</td>
                         <td style={{ padding: "4px 6px" }}>
                           <span style={{
@@ -235,7 +256,10 @@ function EvaluationSuite({ data }: { data: EvalSuite | null }) {
                             background: "var(--bg-tertiary, #f0f0f0)",
                           }}>{q.category}</span>
                         </td>
-                        <td style={{ padding: "4px 6px", color: "var(--text-secondary)" }}>{q.expected_terms.join(", ")}</td>
+                        <td style={{ padding: "4px 6px", color: "var(--text-secondary)", fontSize: "10px" }}>{q.expected_terms.join(", ")}</td>
+                        <td style={{ padding: "4px 6px", color: "var(--text-secondary)", fontSize: "10px" }}>
+                          {q.expected_pages.length > 0 ? q.expected_pages.join(", ") : "—"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -246,17 +270,102 @@ function EvaluationSuite({ data }: { data: EvalSuite | null }) {
         );
       })}
 
-      {/* Expanded queries */}
-      {data.documents["_expanded"] && data.documents["_expanded"].length > 0 && (
-        <div style={{ marginTop: "12px", padding: "10px 12px", background: "var(--bg-secondary)", borderRadius: "6px" }}>
-          <div style={{ fontWeight: 600, marginBottom: "4px" }}>
-            Expanded Query Set ({data.documents["_expanded"].length} additional queries)
-          </div>
-          <p style={{ color: "var(--text-secondary)", margin: "4px 0", fontSize: "11px" }}>
-            Additional queries added for statistical confidence across all documents and categories.
-          </p>
+      <div style={{ marginTop: "12px", padding: "10px", background: "var(--bg-secondary)", borderRadius: "6px", fontSize: "11px", color: "var(--text-secondary)" }}>
+        To add new evaluation queries, edit <code>src/search/ground_truth.py</code> and add
+        a <code>RelevanceJudgment</code> to the appropriate document list or <code>EXPANDED_QUERIES</code>.
+        Re-run <code>python -m src.cli search-eval</code> to benchmark against the updated set.
+      </div>
+    </div>
+  );
+}
+
+/* ─── Evaluation Results ────────────────────────────────────── */
+
+function EvaluationResults({ data }: { data: EvalResults | null }) {
+  if (!data) {
+    return <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>Loading results...</div>;
+  }
+
+  if (!data.has_results) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)", fontSize: "13px" }}>
+        <p style={{ fontSize: "24px", marginBottom: "12px" }}>📊</p>
+        <p>No benchmark results available yet.</p>
+        <p style={{ marginTop: "8px" }}>
+          Run the evaluation benchmark to generate results:
+        </p>
+        <code style={{ display: "block", marginTop: "8px", padding: "8px", background: "var(--bg-secondary)", borderRadius: "4px" }}>
+          python -m src.cli search-eval
+        </code>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontSize: "13px", color: "var(--text-primary)" }}>
+      <p style={{ color: "var(--text-secondary)", marginBottom: "16px" }}>
+        Results from the exhaustive embedding model benchmark across all indexed documents and query configurations.
+      </p>
+
+      {/* Key Findings */}
+      {data.key_findings.length > 0 && (
+        <div style={{ background: "var(--info-bg, #e3f2fd)", borderRadius: "6px", padding: "12px", marginBottom: "16px" }}>
+          <div style={{ fontWeight: 600, marginBottom: "8px", color: "var(--info-text, #1565c0)" }}>Key Findings:</div>
+          <ol style={{ margin: 0, paddingLeft: "20px" }}>
+            {data.key_findings.map((f, i) => (
+              <li key={i} style={{ margin: "4px 0" }}>{f}</li>
+            ))}
+          </ol>
         </div>
       )}
+
+      {/* Rankings Table */}
+      {data.rankings.length > 0 && (
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ fontWeight: 600, marginBottom: "8px" }}>Configuration Rankings:</div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: "11px", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: "2px solid var(--border)" }}>
+                  <th style={{ padding: "6px" }}>#</th>
+                  <th style={{ padding: "6px" }}>Configuration</th>
+                  <th style={{ padding: "6px" }}>Recall@10</th>
+                  <th style={{ padding: "6px" }}>MRR</th>
+                  <th style={{ padding: "6px" }}>Hit Rate</th>
+                  <th style={{ padding: "6px" }}>Latency</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rankings.map((r) => (
+                  <tr key={r.rank} style={{
+                    borderBottom: "1px solid var(--border-light, #eee)",
+                    background: r.rank === 1 ? "var(--success-bg, #e8f5e9)" : "transparent",
+                    fontWeight: r.rank === 1 ? 600 : 400,
+                  }}>
+                    <td style={{ padding: "6px" }}>{r.rank}</td>
+                    <td style={{ padding: "6px" }}>{r.configuration}</td>
+                    <td style={{ padding: "6px" }}>{r.recall_at_10}</td>
+                    <td style={{ padding: "6px" }}>{r.mrr}</td>
+                    <td style={{ padding: "6px" }}>{r.hit_rate}</td>
+                    <td style={{ padding: "6px" }}>{r.latency}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* How to re-run */}
+      <div style={{ marginTop: "16px", padding: "10px", background: "var(--bg-secondary)", borderRadius: "6px", fontSize: "11px", color: "var(--text-secondary)" }}>
+        <strong>To re-run the benchmark</strong> (e.g., after adding new queries or documents):
+        <code style={{ display: "block", marginTop: "6px", padding: "6px", background: "var(--bg-tertiary, #f0f0f0)", borderRadius: "4px" }}>
+          python -m src.cli search-eval -k 10
+        </code>
+        <div style={{ marginTop: "6px" }}>
+          Results are saved to <code>tests/results/search_eval/</code> and will appear here automatically.
+        </div>
+      </div>
     </div>
   );
 }

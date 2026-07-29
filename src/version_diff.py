@@ -128,7 +128,7 @@ def detect_families(scan_dirs: list[Path | str] | None = None) -> list[DocumentF
     Returns families where multiple versions of the same document exist.
     """
     if scan_dirs is None:
-        scan_dirs = [Path("icds/digital"), Path("icds/flat"), Path("uploads")]
+        scan_dirs = [Path("icds/digital"), Path("uploads")]
 
     # Collect all PDFs with metadata
     all_versions: dict[str, list[DocumentVersion]] = {}

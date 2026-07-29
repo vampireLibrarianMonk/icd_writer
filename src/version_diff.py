@@ -125,12 +125,18 @@ def normalize_stem(filename: str) -> str:
 def detect_families(scan_dirs: list[Path | str] | None = None) -> list[DocumentFamily]:
     """Scan directories and group documents into version families.
 
+    Only considers documents that have been indexed (have a _document_ir.yaml
+    in output/). This ensures the diff tab only shows versions the user has
+    explicitly uploaded and processed.
+
     Returns families where multiple versions of the same document exist.
     """
     if scan_dirs is None:
         scan_dirs = [Path("icds/digital"), Path("uploads")]
 
-    # Collect all PDFs with metadata
+    output_dir = Path("output")
+
+    # Collect all PDFs with metadata — only indexed ones
     all_versions: dict[str, list[DocumentVersion]] = {}
 
     for scan_dir in scan_dirs:
@@ -139,6 +145,11 @@ def detect_families(scan_dirs: list[Path | str] | None = None) -> list[DocumentF
             continue
 
         for pdf_path in sorted(scan_dir.glob("*.pdf")):
+            # Only include documents that have been indexed
+            ir_path = output_dir / f"{pdf_path.stem}_document_ir.yaml"
+            if not ir_path.exists():
+                continue
+
             doc = fitz.open(str(pdf_path))
             sha = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
 

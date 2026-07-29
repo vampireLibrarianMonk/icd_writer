@@ -371,6 +371,95 @@ def create_app() -> FastAPI:
         docs.sort(key=lambda d: d["filename"])
         return {"documents": docs}
 
+    @app.delete("/document/{doc_stem}")
+    def delete_document(doc_stem: str):
+        """Remove a document completely: OpenSearch indices, IR file, TBD items, and optionally the PDF.
+
+        Args:
+            doc_stem: The filename stem (e.g., '20130010957' for '20130010957.pdf')
+        """
+        import hashlib
+        from src.search.config import SearchConfig, ALL_CONFIGS
+        from src.search.indexing import IndexManager
+        from src.search.tbd_dashboard import TBDDashboard
+
+        search_config = SearchConfig(
+            opensearch_host=os.environ.get("OPENSEARCH_HOST", "localhost"),
+            opensearch_port=int(os.environ.get("OPENSEARCH_PORT", "9200")),
+            opensearch_scheme=os.environ.get("OPENSEARCH_SCHEME", "http"),
+            aws_region="us-east-1",
+        )
+
+        # Find the PDF file
+        pdf_path = None
+        pdf_hash = None
+        for scan_dir in [Path("icds/digital"), Path("uploads")]:
+            candidate = scan_dir / f"{doc_stem}.pdf"
+            if candidate.exists():
+                pdf_path = candidate
+                pdf_hash = hashlib.sha256(candidate.read_bytes()).hexdigest()
+                break
+
+        if not pdf_path:
+            raise HTTPException(404, f"Document not found: {doc_stem}")
+
+        results = {
+            "document": doc_stem,
+            "indices_cleared": 0,
+            "chunks_deleted": 0,
+            "ir_deleted": False,
+            "tbd_items_removed": 0,
+            "pdf_deleted": False,
+        }
+
+        # 1. Remove from all OpenSearch indices
+        if pdf_hash:
+            index_manager = IndexManager(search_config)
+            for config in ALL_CONFIGS:
+                index_name = config.index_name
+                try:
+                    deleted = index_manager.delete_document(index_name, pdf_hash)
+                    results["chunks_deleted"] += deleted
+                    if deleted > 0:
+                        results["indices_cleared"] += 1
+                except Exception:
+                    pass  # Index may not exist yet
+
+        # 2. Delete the Document IR file
+        ir_path = Path("output") / f"{doc_stem}_document_ir.yaml"
+        if ir_path.exists():
+            ir_path.unlink()
+            results["ir_deleted"] = True
+
+        # 3. Remove TBD items for this document
+        try:
+            dashboard = TBDDashboard(search_config=search_config, region="us-east-1")
+            items_to_remove = []
+            for item_id, item in dashboard._items.items():
+                item_doc = item.document_title.lower()
+                if doc_stem.lower() in item_doc or item_doc in doc_stem.lower():
+                    items_to_remove.append(item_id)
+            for item_id in items_to_remove:
+                del dashboard._items[item_id]
+            results["tbd_items_removed"] = len(items_to_remove)
+            if items_to_remove:
+                dashboard.save_state()
+        except Exception:
+            pass
+
+        # 4. Delete PDF if it's in uploads/ (don't delete from icds/digital — those are source-controlled)
+        if pdf_path and "uploads" in str(pdf_path):
+            pdf_path.unlink()
+            results["pdf_deleted"] = True
+
+        # 5. If the currently loaded document is the one being deleted, clear state
+        session = state["session"]
+        if session and session.document_path and doc_stem in session.document_path:
+            state["document_ir"] = None
+            state["session"] = None
+
+        return results
+
     @app.post("/document/open")
     def open_document(pdf_path: str):
         """Open a PDF and run the extraction pipeline."""

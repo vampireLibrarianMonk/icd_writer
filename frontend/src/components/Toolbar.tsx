@@ -82,6 +82,48 @@ export function Toolbar({ onFileUpload }: ToolbarProps) {
     window.location.href = `${API_BASE}/document/export-download?filename=${encodeURIComponent(exportName)}`;
   };
 
+  const handleDelete = async () => {
+    setFileMenuOpen(false);
+    const docPath = useEditorStore.getState().documentPath;
+    const filename = docPath.split("/").pop() || "this document";
+    const stem = filename.replace(".pdf", "");
+
+    const confirmed = window.confirm(
+      `Remove "${filename}" from the application?\n\n` +
+      `This will:\n` +
+      `• Remove all search index data (OpenSearch)\n` +
+      `• Delete the extracted document structure\n` +
+      `• Remove associated TBD/TBR items\n\n` +
+      `The original PDF in icds/ will NOT be deleted.\n` +
+      `Uploaded PDFs in uploads/ WILL be deleted.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const result = await api.deleteDocument(stem);
+      // Reset the editor state
+      useEditorStore.setState({
+        documentLoaded: false,
+        documentPath: "",
+        totalPages: 0,
+        currentPage: 1,
+        pageData: null,
+        selectedBlock: null,
+        editText: "",
+      });
+      // Refresh available docs
+      api.listDocuments().then((res) => setAvailableDocs(res.documents || []));
+      alert(
+        `Document removed.\n\n` +
+        `• ${result.chunks_deleted} chunks removed from ${result.indices_cleared} indices\n` +
+        `• ${result.tbd_items_removed} TBD items removed\n` +
+        `• IR file deleted: ${result.ir_deleted}`
+      );
+    } catch (e) {
+      alert("Delete failed: " + (e instanceof Error ? e.message : "unknown error"));
+    }
+  };
+
   return (
     <div style={{
       display: "flex",
@@ -128,6 +170,7 @@ export function Toolbar({ onFileUpload }: ToolbarProps) {
             <MenuDivider />
             <MenuItem label="Save Session" shortcut="Ctrl+S" onClick={handleSave} disabled={!documentLoaded} />
             <MenuItem label="Export PDF..." onClick={handleExport} disabled={!documentLoaded} />
+            <MenuItem label="Remove Document..." onClick={handleDelete} disabled={!documentLoaded} />
             <MenuDivider />
             <MenuItem label="Undo" shortcut="Ctrl+Z" onClick={() => { setFileMenuOpen(false); undo(); }} disabled={!canUndo} />
             <MenuItem label="Redo" shortcut="Ctrl+Y" onClick={() => { setFileMenuOpen(false); redo(); }} disabled={!canRedo} />

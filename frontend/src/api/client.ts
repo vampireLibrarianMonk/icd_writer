@@ -210,4 +210,11 @@ export const api = {
     const res = await fetch(`${API_BASE}/document/ingest/status/${ingestId}`);
     return res.json();
   },
+
+  async deleteDocument(docStem: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/document/${encodeURIComponent(docStem)}`, {
+      method: "DELETE",
+    });
+    return res.json();
+  },
 };

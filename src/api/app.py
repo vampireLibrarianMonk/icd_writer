@@ -1512,6 +1512,47 @@ def create_app() -> FastAPI:
 
     # ─── Search & RAG ────────────────────────────────────────────────
 
+    @app.get("/search/evaluation-suite")
+    def get_evaluation_suite():
+        """Return the ground truth evaluation queries organized by document."""
+        from src.search.ground_truth import ALL_GROUND_TRUTH, EXPANDED_QUERIES
+
+        result = {}
+        for doc_key, judgments in ALL_GROUND_TRUTH.items():
+            result[doc_key] = [
+                {
+                    "query_id": j.query_id,
+                    "query": j.query,
+                    "expected_terms": j.relevant_texts,
+                    "expected_pages": j.relevant_pages,
+                    "category": j.category,
+                }
+                for j in judgments
+            ]
+
+        # Add expanded queries as a separate group
+        result["_expanded"] = [
+            {
+                "query_id": j.query_id,
+                "query": j.query,
+                "expected_terms": j.relevant_texts,
+                "expected_pages": j.relevant_pages,
+                "category": j.category,
+            }
+            for j in EXPANDED_QUERIES
+        ]
+
+        return {
+            "documents": result,
+            "total_queries": sum(len(v) for v in result.values()),
+            "metrics_measured": [
+                "Recall@5 — Of correct results, how many appear in top 5?",
+                "Recall@10 — Of correct results, how many appear in top 10?",
+                "MRR (Mean Reciprocal Rank) — How high is the first correct result?",
+                "Precision@5 — Of top 5, how many are relevant?",
+            ],
+        }
+
     @app.post("/search")
     def search_documents(query: str, k: int = 10, mode: str = "rrf", rag: bool = False):
         """Search across indexed ICD documents, optionally with RAG."""

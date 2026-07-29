@@ -11,9 +11,10 @@ interface DocInfo {
 
 interface ToolbarProps {
   onFileUpload: (file: File) => void;
+  onShowHelp: (tab?: "how-it-works" | "evaluation" | "about") => void;
 }
 
-export function Toolbar({ onFileUpload }: ToolbarProps) {
+export function Toolbar({ onFileUpload, onShowHelp }: ToolbarProps) {
   const { documentLoaded, editCount, undo, redo, canUndo, canRedo, documentPath } = useEditorStore();
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [darkMode, setDarkMode] = useState(false);
@@ -177,6 +178,25 @@ export function Toolbar({ onFileUpload }: ToolbarProps) {
           </div>
         )}
       </div>
+
+      {/* Help menu */}
+      <button
+        onClick={() => onShowHelp("how-it-works")}
+        style={{
+          background: "transparent",
+          border: "none",
+          padding: "4px 10px",
+          cursor: "pointer",
+          fontWeight: 500,
+          fontSize: "13px",
+          borderRadius: "4px",
+          color: "var(--text-primary)",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary, #e8e8e8)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      >
+        Help
+      </button>
 
       <span style={{ borderLeft: "1px solid var(--border, #ccc)", height: "20px" }} />
 

@@ -6,6 +6,7 @@ import { TBDDashboard } from "./components/TBDDashboardPanel";
 import { VersionDiffPanel } from "./components/VersionDiffPanel";
 import { StatusBar } from "./components/StatusBar";
 import { UploadProgressPanel } from "./components/UploadProgressPanel";
+import { HelpModal } from "./components/HelpModal";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useEditorStore } from "./store/editorStore";
 import type { IngestStatus } from "./api/client";
@@ -18,6 +19,7 @@ function App() {
   const [activePanel, setActivePanel] = useState<RightPanel>("editor");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [ingestStatus, setIngestStatus] = useState<IngestStatus | null>(null);
+  const [helpTab, setHelpTab] = useState<"how-it-works" | "evaluation" | "about" | null>(null);
   const suppressPanelSwitchRef = useRef(false);
 
   const handleMouseDown = () => setDragging(true);
@@ -110,7 +112,7 @@ function App() {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      <Toolbar onFileUpload={handleFileUpload} />
+      <Toolbar onFileUpload={handleFileUpload} onShowHelp={(tab) => setHelpTab(tab || "how-it-works")} />
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <DocumentView />
         {/* Resizable divider */}
@@ -168,7 +170,7 @@ function App() {
         </div>
       </div>
       <StatusBar ingestStatus={ingestStatus} />
-      {/* Upload progress modal (shown during active upload) */}
+      {/* Upload progress modal */}
       {uploadFile && (
         <UploadProgressPanel
           file={uploadFile}
@@ -176,6 +178,10 @@ function App() {
           onComplete={handleIngestComplete}
           onDismiss={handleUploadDismiss}
         />
+      )}
+      {/* Help modal */}
+      {helpTab && (
+        <HelpModal initialTab={helpTab} onClose={() => setHelpTab(null)} />
       )}
     </div>
   );

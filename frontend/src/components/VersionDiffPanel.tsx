@@ -154,7 +154,8 @@ export function VersionDiffPanel() {
       {/* Related versions */}
       {relatedVersions.length > 0 && !diffSummary && (
         <div style={{
-          background: "#e3f2fd",
+          background: "var(--info-bg)",
+          color: "var(--info-text)",
           borderRadius: "6px",
           padding: "10px",
           marginBottom: "12px",
@@ -164,7 +165,7 @@ export function VersionDiffPanel() {
           </div>
           {relatedVersions.map((v, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", margin: "4px 0" }}>
-              <span style={{ fontSize: "11px", flex: 1 }}>
+              <span style={{ fontSize: "11px", flex: 1, color: "var(--text-primary)" }}>
                 {v.filename} ({v.page_count}pg{v.revision ? `, Rev ${v.revision}` : ""}, {v.doc_type})
               </span>
               <button
@@ -192,15 +193,16 @@ export function VersionDiffPanel() {
       {/* OCR required message */}
       {needsOcr && !loading && !diffSummary && !ocrRunning && (
         <div style={{
-          background: "#fff3e0",
+          background: "var(--warning-bg)",
+          color: "var(--warning-text)",
           borderRadius: "6px",
           padding: "14px",
           marginBottom: "12px",
         }}>
-          <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#e65100" }}>
+          <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px" }}>
             ⚠️ OCR Required
           </div>
-          <p style={{ fontSize: "12px", margin: "0 0 8px", lineHeight: 1.5 }}>
+          <p style={{ fontSize: "12px", margin: "0 0 8px", lineHeight: 1.5, color: "var(--text-primary)" }}>
             The document <strong>{needsOcr.split("/").pop()}</strong> is a flattened/scanned PDF with no extractable text.
             Differential analysis cannot be performed until OCR (Optical Character Recognition) is run to recover the text content.
           </p>
@@ -233,15 +235,16 @@ export function VersionDiffPanel() {
         <div style={{ flex: 1, overflowY: "auto" }}>
           {/* Comparison header — tells user what's being compared */}
           <div style={{
-            background: "#e8f5e9",
+            background: "var(--success-bg)",
+            color: "var(--success-text)",
             borderRadius: "6px",
             padding: "8px 10px",
             marginBottom: "8px",
             fontSize: "11px",
           }}>
             <div style={{ fontWeight: 600, marginBottom: "4px" }}>Comparing:</div>
-            <div>📄 <b>Current:</b> {documentPath.split("/").pop()}</div>
-            <div>📄 <b>Against:</b> {comparing?.split("/").pop()}</div>
+            <div style={{ color: "var(--text-primary)" }}>📄 <b>Current:</b> {documentPath.split("/").pop()}</div>
+            <div style={{ color: "var(--text-primary)" }}>📄 <b>Against:</b> {comparing?.split("/").pop()}</div>
           </div>
 
           <div style={{
@@ -360,9 +363,9 @@ function DiffSectionRow({ diff, expanded, onToggle, aiSummary, onAiSummarize, ai
 
           {/* AI Summary (Level 3 — on demand) */}
           {aiSummary ? (
-            <div style={{ margin: "6px 0", padding: "6px", background: "#f3e5f5", borderRadius: "4px", fontSize: "11px" }}>
+            <div style={{ margin: "6px 0", padding: "6px", background: "var(--highlight-bg)", color: "var(--highlight-text)", borderRadius: "4px", fontSize: "11px" }}>
               <div style={{ fontWeight: 500, marginBottom: "2px" }}>🤖 AI Analysis:</div>
-              {aiSummary}
+              <span style={{ color: "var(--text-primary)" }}>{aiSummary}</span>
             </div>
           ) : (
             <button
@@ -420,7 +423,7 @@ function OcrProgress({ filename }: { filename: string }) {
       <div style={{
         width: "100%",
         height: "6px",
-        background: "#e0e0e0",
+        background: "var(--bg-tertiary, #e0e0e0)",
         borderRadius: "3px",
         overflow: "hidden",
         marginBottom: "8px",

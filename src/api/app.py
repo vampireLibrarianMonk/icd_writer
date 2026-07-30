@@ -821,37 +821,12 @@ def create_app() -> FastAPI:
             doc.close()
             try:
                 from weasyprint import HTML
-                from src.rendering.extract import extract_page_elements
                 from src.rendering.renderer import render_page_to_html
-                from src.rendering.elements import TextElement
+                from src.rendering.ir_renderer import _ir_blocks_to_elements
 
                 page_info = doc_ir.pages[page_number - 1]
-                page_width, page_height, elements = extract_page_elements(
-                    source_path, page_number
-                )
-
-                # Patch edited text blocks into elements
-                patched = []
-                for elem in elements:
-                    if isinstance(elem, TextElement):
-                        for block in page_info.text_blocks:
-                            if (abs(block.bbox.x0 - elem.bbox.x0) < 1
-                                    and abs(block.bbox.y0 - elem.bbox.y0) < 1):
-                                if block.text_verbatim != elem.text:
-                                    elem = TextElement(
-                                        text=block.text_verbatim,
-                                        bbox=elem.bbox,
-                                        font_name=elem.font_name,
-                                        font_size_pt=elem.font_size_pt,
-                                        bold=elem.bold,
-                                        italic=elem.italic,
-                                        color=elem.color,
-                                        char_positions=None,
-                                    )
-                                break
-                    patched.append(elem)
-
-                html_content = render_page_to_html(page_width, page_height, patched)
+                elements = _ir_blocks_to_elements(page_info)
+                html_content = render_page_to_html(page_info.width_pt, page_info.height_pt, elements)
                 pdf_bytes = HTML(string=html_content).write_pdf()
 
                 # Convert PDF page to PNG

@@ -130,7 +130,7 @@ def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
 
         elements.append(
             TextElement(
-                text=block.text_verbatim,
+                text=_format_block_text(block),
                 bbox=block.bbox,
                 font_name=font_name,
                 font_size_pt=font_size,
@@ -142,6 +142,44 @@ def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
         )
 
     return elements
+
+
+def _format_block_text(block) -> str:
+    """Format block text for rendering.
+
+    Detects table-like content (newline-separated key-value pairs)
+    and formats it with spacing to approximate tabular layout.
+    """
+    text = block.text_verbatim
+    lines = text.split("\n")
+
+    # Detect table pattern: alternating key/value lines (short lines, no sentences)
+    if len(lines) >= 4 and all(len(l.strip()) < 40 for l in lines if l.strip()):
+        # Check if it looks like key-value pairs (even lines are keys, odd are values)
+        # Or header row followed by data rows
+        is_tabular = True
+        for line in lines:
+            if len(line.strip()) > 60:
+                is_tabular = False
+                break
+
+        if is_tabular:
+            # Format as aligned columns with padding
+            formatted_lines = []
+            i = 0
+            while i < len(lines):
+                line = lines[i].strip()
+                if line:
+                    # Check if next line is a value (short, no colon)
+                    if i + 1 < len(lines) and lines[i + 1].strip() and len(lines[i + 1].strip()) < 30:
+                        formatted_lines.append(f"{line:30s} {lines[i + 1].strip()}")
+                        i += 2
+                        continue
+                    formatted_lines.append(line)
+                i += 1
+            return "\n".join(formatted_lines)
+
+    return text
 
 
 def _find_edited_pages(

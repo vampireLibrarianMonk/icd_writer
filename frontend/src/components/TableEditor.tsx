@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useEditorStore } from "../store/editorStore";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 interface TableCell {
   text: string;
   block_id: string | null;
@@ -26,7 +28,7 @@ export function TableEditor({ yMin = 0, yMax = 9999 }: { yMin?: number; yMax?: n
       setTableData(null);
       return;
     }
-    fetch(`http://localhost:8000/document/page/${currentPage}/table?y_min=${yMin}&y_max=${yMax}`)
+    fetch(`${API_BASE}/document/page/${currentPage}/table?y_min=${yMin}&y_max=${yMax}`)
       .then((res) => res.json())
       .then((data) => {
         setTableData(data);
@@ -57,20 +59,20 @@ export function TableEditor({ yMin = 0, yMax = 9999 }: { yMin?: number; yMax?: n
 
       // Persist via block edit if block_id exists, otherwise use table-cell endpoint
       if (cell.block_id) {
-        await fetch(`http://localhost:8000/document/block/${cell.block_id}`, {
+        await fetch(`${API_BASE}/document/block/${cell.block_id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ new_text: cellText }),
         });
       } else {
         await fetch(
-          `http://localhost:8000/document/table-cell?page=${currentPage}&old_text=${encodeURIComponent(cell.text)}&new_text=${encodeURIComponent(cellText)}`,
+          `${API_BASE}/document/table-cell?page=${currentPage}&old_text=${encodeURIComponent(cell.text)}&new_text=${encodeURIComponent(cellText)}`,
           { method: "PUT" }
         );
       }
 
       // Update store state (edit count, undo availability)
-      const actions = await fetch("http://localhost:8000/session/actions").then((r) => r.json());
+      const actions = await fetch("${API_BASE}/session/actions").then((r) => r.json());
       useEditorStore.setState((state) => ({
         editCount: state.editCount + 1,
         canUndo: actions.undo_available,

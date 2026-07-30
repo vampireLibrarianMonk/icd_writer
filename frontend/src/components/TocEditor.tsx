@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useEditorStore } from "../store/editorStore";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 interface TocEntry {
   title: string;
   page_ref: string;
@@ -22,7 +24,7 @@ export function TocEditor() {
 
   useEffect(() => {
     if (!totalPages || !currentPage) return;
-    fetch(`http://localhost:8000/document/page/${currentPage}/toc`)
+    fetch(`${API_BASE}/document/page/${currentPage}/toc`)
       .then((r) => r.json())
       .then(setTocData)
       .catch(() => setTocData(null));

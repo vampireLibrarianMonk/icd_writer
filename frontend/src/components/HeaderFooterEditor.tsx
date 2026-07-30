@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useEditorStore } from "../store/editorStore";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 interface HFEntry {
   text: string;
   alignment: string;
@@ -25,7 +27,7 @@ export function HeaderFooterEditor() {
 
   useEffect(() => {
     if (!totalPages || !currentPage) return;
-    fetch(`http://localhost:8000/document/page/${currentPage}/header-footer`)
+    fetch(`${API_BASE}/document/page/${currentPage}/header-footer`)
       .then((r) => r.json())
       .then(setHfData)
       .catch(() => setHfData(null));

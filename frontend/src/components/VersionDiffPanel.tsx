@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { useEditorStore } from "../store/editorStore";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 interface DiffSection {
   section_heading: string;
   change_type: string;
@@ -99,7 +101,7 @@ export function VersionDiffPanel() {
     if (!needsOcr) return;
     setOcrRunning(true);
     try {
-      const res = await fetch(`http://localhost:8000/document/open-ocr?pdf_path=${encodeURIComponent(needsOcr)}`, { method: "POST" });
+      const res = await fetch(`${API_BASE}/document/open-ocr?pdf_path=${encodeURIComponent(needsOcr)}`, { method: "POST" });
       const result = await res.json();
       if (result.status === "ready") {
         // OCR complete — now run diff

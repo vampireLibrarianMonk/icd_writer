@@ -1,6 +1,8 @@
 import { useEditorStore } from "../store/editorStore";
 import { useEffect, useState } from "react";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 interface Overlay {
   type: "header" | "footer" | "table_cell" | "text_block";
   label: string;
@@ -19,9 +21,9 @@ export function DocumentView() {
     if (!totalPages || !currentPage) return;
 
     Promise.all([
-      fetch(`http://localhost:8000/document/page/${currentPage}/elements`).then((r) => r.json()),
-      fetch(`http://localhost:8000/document/page/${currentPage}/analysis`).then((r) => r.json()),
-      fetch(`http://localhost:8000/document/page/${currentPage}/table-zones`).then((r) => r.json()),
+      fetch(`${API_BASE}/document/page/${currentPage}/elements`).then((r) => r.json()),
+      fetch(`${API_BASE}/document/page/${currentPage}/analysis`).then((r) => r.json()),
+      fetch(`${API_BASE}/document/page/${currentPage}/table-zones`).then((r) => r.json()),
     ]).then(([elemData, analysis, zonesData]) => {
       let elems = elemData.elements || [];
       // On TOC pages, only show header/footer overlays
@@ -124,7 +126,7 @@ export function DocumentView() {
   }
 
   const scale = 0.75;
-  const pageImageUrl = `http://localhost:8000/document/page/${currentPage}/image?v=${refreshTrigger}`;
+  const pageImageUrl = `${API_BASE}/document/page/${currentPage}/image?v=${refreshTrigger}`;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>

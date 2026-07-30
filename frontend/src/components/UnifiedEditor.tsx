@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { TocEditor } from "./TocEditor";
 import { TableEditor } from "./TableEditor";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 interface ClickableElement {
   type: "header" | "footer" | "table_cell" | "text_block";
   label: string;
@@ -27,7 +29,7 @@ export function UnifiedEditor({ width }: { width: number }) {
   // Load all elements for this page (for navigation)
   useEffect(() => {
     if (!documentLoaded || !currentPage) return;
-    fetch(`http://localhost:8000/document/page/${currentPage}/elements`)
+    fetch(`${API_BASE}/document/page/${currentPage}/elements`)
       .then((r) => r.json())
       .then((data) => {
         setAllElements(data.elements || []);
@@ -91,7 +93,7 @@ export function UnifiedEditor({ width }: { width: number }) {
   // Check page type
   useEffect(() => {
     if (!documentLoaded || !currentPage) return;
-    fetch(`http://localhost:8000/document/page/${currentPage}/analysis`)
+    fetch(`${API_BASE}/document/page/${currentPage}/analysis`)
       .then((r) => r.json())
       .then((data) => {
         setIsTocPage(data.page_type === "table_of_contents");
@@ -155,21 +157,21 @@ export function UnifiedEditor({ width }: { width: number }) {
     if (!hasChanges) return;
 
     if (selected.id) {
-      await fetch(`http://localhost:8000/document/block/${selected.id}`, {
+      await fetch(`${API_BASE}/document/block/${selected.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ new_text: editText }),
       });
     } else {
       await fetch(
-        `http://localhost:8000/document/table-cell?page=${currentPage}&old_text=${encodeURIComponent(selected.text)}&new_text=${encodeURIComponent(editText)}`,
+        `${API_BASE}/document/table-cell?page=${currentPage}&old_text=${encodeURIComponent(selected.text)}&new_text=${encodeURIComponent(editText)}`,
         { method: "PUT" }
       );
     }
 
     setSelected({ ...selected, text: editText });
 
-    const actions = await fetch("http://localhost:8000/session/actions").then((r) => r.json());
+    const actions = await fetch("${API_BASE}/session/actions").then((r) => r.json());
     // Use Date.now() to guarantee a unique value that always changes
     useEditorStore.setState({
       editCount: useEditorStore.getState().editCount + 1,

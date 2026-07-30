@@ -46,7 +46,7 @@ class TestPageExtensionViaEdit:
         # Find a body block (not header/footer)
         target_block = None
         for b in blocks:
-            if b["type"] == "paragraph" and b["bbox"]["y0"] > 60:
+            if b["type"] == "paragraph" and 60 < b["bbox"]["y0"] < 700:
                 target_block = b
                 break
 

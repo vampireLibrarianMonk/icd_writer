@@ -6,6 +6,7 @@ import fitz
 import pytest
 
 from src.rendering import render_page_to_pdf
+from tests.conftest import skip_no_weasyprint
 
 ICDS_DIR = Path(__file__).parent.parent.parent / "icds"
 # Only test digital PDFs (flattened/scanned can't round-trip text)
@@ -18,6 +19,7 @@ def sample_pdf(request: pytest.FixtureRequest) -> Path:
     return request.param
 
 
+@skip_no_weasyprint
 @pytest.mark.skipif(not SAMPLE_PDFS, reason="No sample PDFs in icds/digital/")
 class TestTextAccuracy:
     def test_text_preserved_on_page_1(self, sample_pdf: Path, tmp_path: Path):

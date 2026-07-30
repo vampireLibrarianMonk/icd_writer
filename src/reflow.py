@@ -190,15 +190,25 @@ def reflow_page(document_ir: DocumentIR, page_number: int,
     overflow_pt = 0.0
     overflowing_blocks: list[str] = []
     for block in blocks:
-        # Skip headers (top of page), typed footer/header blocks
-        if block.bbox.y0 < 60 or block.block_type in ("header", "footer"):
+        # Skip explicitly-typed header/footer blocks
+        if block.block_type in ("header", "footer"):
             continue
-        # Skip page footers by content heuristic: contains "Page N" pattern
-        # and sits at the very bottom of the page (y0 > page_height - 60)
-        if block.bbox.y0 > page_height - 60:
-            import re
-            if re.search(r'\bPage\s+\d+\b', block.text_verbatim, re.IGNORECASE):
-                continue
+
+        # Determine if this block was shifted by the reflow operation.
+        # Blocks after the edited block in sorted order were shifted by height_delta.
+        # Use their PRE-SHIFT position to decide if they're genuine footers.
+        block_idx_in_sorted = blocks.index(block)
+        was_shifted = (block_idx_in_sorted > edited_idx and abs(height_delta) > 0.5)
+        pre_shift_y0 = block.bbox.y0 - height_delta if was_shifted else block.bbox.y0
+
+        # If the block was originally in the header zone (top 60pt), skip
+        if pre_shift_y0 < 60:
+            continue
+        # If the block was originally in the footer zone (bottom 50pt), skip
+        # These are genuine page footers that should never be flagged as overflow
+        if pre_shift_y0 > page_height - 50:
+            continue
+
         if block.bbox.y1 > content_bottom:
             overflow_amount = block.bbox.y1 - content_bottom
             overflow_pt = max(overflow_pt, overflow_amount)
@@ -254,12 +264,19 @@ def get_page_overflow(document_ir: DocumentIR, page_number: int,
 
 
 def _is_header_or_footer(block: TextBlock, page_height: float) -> bool:
-    """Determine if a block is a header or footer (should not be reflowed)."""
+    """Determine if a block is a header or footer (should not be reflowed/moved).
+
+    Headers occupy the top 60pt of a page.
+    Footers occupy the bottom 50pt (typically author, page number, date lines).
+    This is intentionally tighter than content_bottom (page_height - 72) to avoid
+    classifying legitimately overflowing body content as footer.
+    """
     # Header zone: top 60pt of page
     if block.bbox.y0 < 60:
         return True
-    # Footer zone: bottom 72pt of page
-    if block.bbox.y0 > page_height - 72:
+    # Footer zone: bottom 50pt of page (y0 > page_height - 50)
+    # This is tighter than content_bottom to only catch genuine footer lines
+    if block.bbox.y0 > page_height - 50:
         return True
     return False
 
@@ -323,30 +340,19 @@ def split_page_on_overflow(
     blocks_to_keep: list[TextBlock] = []
 
     for block in page.text_blocks:
-        # Keep headers (top of page) and explicitly typed header/footer blocks
-        if block.bbox.y0 < 60 or block.block_type in ("header", "footer"):
+        # Keep headers (top 60pt of page)
+        if block.bbox.y0 < 60:
+            blocks_to_keep.append(block)
+        elif block.block_type in ("header", "footer"):
+            blocks_to_keep.append(block)
+        # Genuine footer: in the footer zone AND within the actual page bounds
+        # A block pushed beyond the page by reflow (y0 > page_height) is NOT a footer
+        elif block.bbox.y0 > page_height - 50 and block.bbox.y0 < page_height:
             blocks_to_keep.append(block)
         elif block.block_type in MOVABLE_BLOCK_TYPES and block.bbox.y0 >= content_bottom:
-            # Check if this is a page footer (contains "Page N" at the very bottom)
-            import re
-            is_page_footer = (
-                block.bbox.y0 > page_height - 60
-                and re.search(r'\bPage\s+\d+\b', block.text_verbatim, re.IGNORECASE)
-            )
-            if is_page_footer:
-                blocks_to_keep.append(block)
-            else:
-                blocks_to_move.append(block)
+            blocks_to_move.append(block)
         elif block.block_type in MOVABLE_BLOCK_TYPES and block.bbox.y1 > content_bottom:
-            import re
-            is_page_footer = (
-                block.bbox.y0 > page_height - 60
-                and re.search(r'\bPage\s+\d+\b', block.text_verbatim, re.IGNORECASE)
-            )
-            if is_page_footer:
-                blocks_to_keep.append(block)
-            else:
-                blocks_to_move.append(block)
+            blocks_to_move.append(block)
         else:
             blocks_to_keep.append(block)
 

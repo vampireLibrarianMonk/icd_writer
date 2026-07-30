@@ -25,6 +25,8 @@ IDSS_F = ICDS_DIR / "digital" / "IDSS_IDD_RevF.pdf"
 HSI_DIGITAL = ICDS_DIR / "digital" / "HSI_SYS_015G.pdf"
 HSI_FLAT = ICDS_DIR / "flat" / "HSI_SYS_015G_flattened.pdf"
 
+OUTPUT_DIR = Path(__file__).parent.parent.parent / "output"
+
 
 # -----------------------------------------------------------------
 # Filename normalization
@@ -62,12 +64,12 @@ class TestFamilyDetection:
 
     def test_detects_families(self):
         """Finds document families from the test corpus."""
-        families = detect_families()
+        families = detect_families(scan_dirs=[ICDS_DIR / "digital", ICDS_DIR / "flat"])
         assert len(families) >= 2  # At least IDSS pair + digital/flat pairs
 
     def test_idss_family_detected(self):
-        """IDSS Rev E and Rev F grouped together (digital + flattened)."""
-        families = detect_families()
+        """IDSS Rev E and Rev F grouped together."""
+        families = detect_families(scan_dirs=[ICDS_DIR / "digital", ICDS_DIR / "flat"])
         idss_family = next((f for f in families if "idss" in f.base_name), None)
         assert idss_family is not None
         assert len(idss_family.versions) >= 2
@@ -77,14 +79,14 @@ class TestFamilyDetection:
 
     def test_family_status_page_count_differs(self):
         """IDSS family correctly flagged as page_count_differs."""
-        families = detect_families()
+        families = detect_families(scan_dirs=[ICDS_DIR / "digital", ICDS_DIR / "flat"])
         idss_family = next((f for f in families if "idss" in f.base_name), None)
         assert idss_family is not None
         assert idss_family.status == "page_count_differs"
 
     def test_digital_flat_pair_detected(self):
         """Digital and flattened versions of same doc grouped."""
-        families = detect_families()
+        families = detect_families(scan_dirs=[ICDS_DIR / "digital", ICDS_DIR / "flat"])
         hsi_family = next((f for f in families if "hsi" in f.base_name), None)
         assert hsi_family is not None
         types = {v.doc_type for v in hsi_family.versions}

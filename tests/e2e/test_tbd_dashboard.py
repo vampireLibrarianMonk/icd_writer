@@ -6,6 +6,8 @@ Tests the cross-document TBD tracking dashboard:
 - Filter by status and type
 - Update item status
 - Verify stats accuracy
+
+Requires OpenSearch (runs in Docker).
 """
 
 from pathlib import Path
@@ -17,6 +19,25 @@ from src.api.app import create_app
 
 ICDS_DIR = Path(__file__).parent.parent.parent / "icds"
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "output"
+
+
+def _opensearch_available() -> bool:
+    """Check if OpenSearch is reachable."""
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1)
+        s.connect(("localhost", 9200))
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _opensearch_available(),
+    reason="OpenSearch not available (requires Docker: docker compose up opensearch)",
+)
 
 
 @pytest.fixture

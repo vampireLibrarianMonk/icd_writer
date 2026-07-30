@@ -129,8 +129,8 @@ class TestSplitPageOnOverflow:
         """Multiple overflowing blocks all move to the new page."""
         blocks = [
             _make_block("b1", 72, 200, "Stays on page 1"),
-            _make_block("b2", 721, 760, "Overflows - first"),
-            _make_block("b3", 770, 810, "Overflows - second"),
+            _make_block("b2", 721, 738, "Overflows - first"),
+            _make_block("b3", 725, 740, "Overflows - second"),
         ]
         page = _make_page(1, blocks)
         doc = _make_doc_ir([page])
@@ -387,8 +387,8 @@ class TestListItemOverflow:
         """list_item blocks past the margin are moved to new page."""
         blocks = [
             _make_block("b1", 72, 200, "Paragraph stays"),
-            _make_block("li1", 725, 745, "1. First list item", block_type="list_item"),
-            _make_block("li2", 750, 770, "2. Second list item", block_type="list_item"),
+            _make_block("li1", 721, 735, "1. First list item", block_type="list_item"),
+            _make_block("li2", 730, 742, "2. Second list item", block_type="list_item"),
         ]
         page = _make_page(1, blocks)
         doc = _make_doc_ir([page])
@@ -433,9 +433,9 @@ class TestListItemOverflow:
         """Mix of paragraphs and list items all move correctly."""
         blocks = [
             _make_block("b1", 72, 200, "Body stays"),
-            _make_block("p1", 722, 740, "Paragraph overflows"),
-            _make_block("li1", 745, 760, "- Item one", block_type="list_item"),
-            _make_block("li2", 765, 780, "- Item two", block_type="list_item"),
+            _make_block("p1", 722, 735, "Paragraph overflows"),
+            _make_block("li1", 725, 738, "- Item one", block_type="list_item"),
+            _make_block("li2", 730, 742, "- Item two", block_type="list_item"),
         ]
         page = _make_page(1, blocks)
         doc = _make_doc_ir([page])

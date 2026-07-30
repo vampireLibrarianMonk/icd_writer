@@ -148,18 +148,26 @@ def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
 
         rendered_regions.append((bbox.x0, bbox.y0, bbox.x1, bbox.y1))
 
-        elements.append(
-            TextElement(
-                text=_format_block_text(block),
-                bbox=block.bbox,
-                font_name=font_name,
-                font_size_pt=font_size,
-                bold=bold,
-                italic=italic,
-                color="#000000",
-                char_positions=None,
+        # Check if this is a table data block (preceded by caption)
+        is_table_block = _is_table_data_block(block, page_info)
+
+        if is_table_block:
+            # Split table text into per-cell TextElements aligned to grid
+            cell_elements = _split_table_into_cells(block, font_name, font_size, bold, italic)
+            elements.extend(cell_elements)
+        else:
+            elements.append(
+                TextElement(
+                    text=_format_block_text(block),
+                    bbox=block.bbox,
+                    font_name=font_name,
+                    font_size_pt=font_size,
+                    bold=bold,
+                    italic=italic,
+                    color="#000000",
+                    char_positions=None,
+                )
             )
-        )
 
     # Add table grid lines for table-data blocks
     _add_table_lines(page_info, elements)
@@ -170,6 +178,112 @@ def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
 def _format_block_text(block) -> str:
     """Format block text for rendering. Plain text passthrough."""
     return block.text_verbatim
+
+
+def _is_table_data_block(block, page_info) -> bool:
+    """Check if a block is table data (paragraph preceded by a caption within 15pt).
+
+    A table data block has:
+    - block_type == "paragraph"
+    - A caption block within 15pt above it
+    - At least 2 newline-separated lines
+    """
+    if block.block_type != "paragraph":
+        return False
+
+    lines = [l for l in block.text_verbatim.split("\n") if l.strip()]
+    if len(lines) < 2:
+        return False
+
+    # Check if preceded by a caption
+    for other in page_info.text_blocks:
+        if other.block_type == "caption":
+            if other.bbox.y1 <= block.bbox.y0 and (block.bbox.y0 - other.bbox.y1) < 15:
+                return True
+
+    return False
+
+
+def _split_table_into_cells(block, font_name: str, font_size: float,
+                            bold: bool, italic: bool) -> list:
+    """Split a table data block into per-cell TextElements.
+
+    Parses newline-separated text into rows x columns and creates
+    a TextElement for each cell, positioned within the grid.
+
+    Assumes 2-column layout (key/value pairs) based on the common
+    ICD table format: "Key\\nValue\\nKey\\nValue\\n..."
+    """
+    from src.rendering.elements import TextElement
+
+    lines = [l for l in block.text_verbatim.split("\n") if l.strip()]
+    if len(lines) < 2:
+        # Fallback: single element
+        return [TextElement(
+            text=block.text_verbatim, bbox=block.bbox,
+            font_name=font_name, font_size_pt=font_size,
+            bold=bold, italic=italic, color="#000000", char_positions=None,
+        )]
+
+    x0 = block.bbox.x0
+    x1 = block.bbox.x1
+    y0 = block.bbox.y0
+    y1 = block.bbox.y1
+    mid_x = (x0 + x1) / 2
+    block_height = y1 - y0
+    num_rows = len(lines) // 2  # Assume pairs (key, value)
+    if num_rows < 1:
+        num_rows = len(lines)
+
+    # Determine layout: even number of lines → 2-column table
+    # Odd number → try single column
+    elements = []
+
+    if len(lines) % 2 == 0 and len(lines) >= 4:
+        # 2-column layout: lines alternate key, value
+        row_height = block_height / num_rows
+        padding_x = 3.0  # Small padding from cell edge
+        padding_y = 2.0  # Small padding from top of cell
+
+        for row_idx in range(num_rows):
+            key_line = lines[row_idx * 2]
+            val_line = lines[row_idx * 2 + 1]
+            row_y = y0 + row_idx * row_height + padding_y
+
+            # Left column (key)
+            elements.append(TextElement(
+                text=key_line,
+                bbox=BoundingBox(x0=x0 + padding_x, y0=row_y,
+                                 x1=mid_x - padding_x, y1=row_y + font_size * 1.2),
+                font_name=font_name, font_size_pt=font_size,
+                bold=bold, italic=italic, color="#000000", char_positions=None,
+            ))
+
+            # Right column (value)
+            elements.append(TextElement(
+                text=val_line,
+                bbox=BoundingBox(x0=mid_x + padding_x, y0=row_y,
+                                 x1=x1 - padding_x, y1=row_y + font_size * 1.2),
+                font_name=font_name, font_size_pt=font_size,
+                bold=bold, italic=italic, color="#000000", char_positions=None,
+            ))
+    else:
+        # Single-column fallback: one line per row
+        row_height = block_height / len(lines)
+        padding_x = 3.0
+        padding_y = 2.0
+
+        for row_idx, line in enumerate(lines):
+            row_y = y0 + row_idx * row_height + padding_y
+            elements.append(TextElement(
+                text=line,
+                bbox=BoundingBox(x0=x0 + padding_x, y0=row_y,
+                                 x1=x1 - padding_x, y1=row_y + font_size * 1.2),
+                font_name=font_name, font_size_pt=font_size,
+                bold=bold, italic=italic, color="#000000", char_positions=None,
+            ))
+
+    return elements
 
 
 def _add_table_lines(page_info, elements):

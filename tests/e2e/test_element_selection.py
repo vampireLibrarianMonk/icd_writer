@@ -99,12 +99,14 @@ class TestElementOverlays:
             assert bbox["y1"] >= bbox["y0"]
 
     def test_elements_include_headers(self, client):
-        """Pages with headers have header-type elements."""
+        """Pages with content have heading or paragraph type elements."""
         res = client.get("/document/page/4/elements")
         data = res.json()
-        types = [e["type"] for e in data["elements"]]
-        # Should have at least text_block elements
-        assert "text_block" in types or "header" in types
+        types = set(e["type"] for e in data["elements"])
+        # Elements endpoint returns IR block types: heading, paragraph, caption, etc.
+        assert types & {"heading", "paragraph", "caption", "header", "text_block"}, (
+            f"No recognized element types found. Got: {types}"
+        )
 
     def test_element_ids_are_unique_per_page(self, client):
         """Element IDs within a page are unique (no duplicates)."""

@@ -43,8 +43,11 @@ RUN pip install --no-cache-dir \
 COPY pyproject.toml .
 COPY src/ src/
 COPY schemas/ schemas/
-COPY tests/results/ tests/results/
+COPY tests/ tests/
 RUN pip install --no-cache-dir -e .
+
+# Install test dependencies
+RUN pip install --no-cache-dir pytest==8.3.5 pytest-cov==6.1.1 httpx
 
 # Create output directory for Document IR files
 RUN mkdir -p /app/output /app/icds

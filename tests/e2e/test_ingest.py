@@ -25,8 +25,11 @@ TSAFE_PDF = ICDS_DIR / "20130010957.pdf"
 def opensearch_available() -> bool:
     """Check if OpenSearch is running."""
     try:
-        import urllib.request
-        urllib.request.urlopen("http://localhost:9200", timeout=2)
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1)
+        s.connect(("localhost", 9200))
+        s.close()
         return True
     except Exception:
         return False

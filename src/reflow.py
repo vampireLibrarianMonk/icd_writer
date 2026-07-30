@@ -190,10 +190,15 @@ def reflow_page(document_ir: DocumentIR, page_number: int,
     overflow_pt = 0.0
     overflowing_blocks: list[str] = []
     for block in blocks:
-        # Skip only true headers (top of page) — don't skip blocks that
-        # were pushed into the footer zone by reflow
+        # Skip headers (top of page), typed footer/header blocks
         if block.bbox.y0 < 60 or block.block_type in ("header", "footer"):
             continue
+        # Skip page footers by content heuristic: contains "Page N" pattern
+        # and sits at the very bottom of the page (y0 > page_height - 60)
+        if block.bbox.y0 > page_height - 60:
+            import re
+            if re.search(r'\bPage\s+\d+\b', block.text_verbatim, re.IGNORECASE):
+                continue
         if block.bbox.y1 > content_bottom:
             overflow_amount = block.bbox.y1 - content_bottom
             overflow_pt = max(overflow_pt, overflow_amount)
@@ -322,11 +327,26 @@ def split_page_on_overflow(
         if block.bbox.y0 < 60 or block.block_type in ("header", "footer"):
             blocks_to_keep.append(block)
         elif block.block_type in MOVABLE_BLOCK_TYPES and block.bbox.y0 >= content_bottom:
-            # Block starts at or below the content bottom — move entirely
-            blocks_to_move.append(block)
+            # Check if this is a page footer (contains "Page N" at the very bottom)
+            import re
+            is_page_footer = (
+                block.bbox.y0 > page_height - 60
+                and re.search(r'\bPage\s+\d+\b', block.text_verbatim, re.IGNORECASE)
+            )
+            if is_page_footer:
+                blocks_to_keep.append(block)
+            else:
+                blocks_to_move.append(block)
         elif block.block_type in MOVABLE_BLOCK_TYPES and block.bbox.y1 > content_bottom:
-            # Block straddles the boundary — move it
-            blocks_to_move.append(block)
+            import re
+            is_page_footer = (
+                block.bbox.y0 > page_height - 60
+                and re.search(r'\bPage\s+\d+\b', block.text_verbatim, re.IGNORECASE)
+            )
+            if is_page_footer:
+                blocks_to_keep.append(block)
+            else:
+                blocks_to_move.append(block)
         else:
             blocks_to_keep.append(block)
 

@@ -193,11 +193,14 @@ Edit text blocks directly in the PDF. If edits expand content past the page boun
 ### 4.3 Editing Table Data (TBR in a Table)
 
 1. Navigate to **page 7** (Section 3.2.1 — Spectrometer Heaters)
-2. Click the text block containing the thermostat characteristics table:
-   *"Characteristic Setting Power 30W (TBR-UCB-110) Turn-on Temperature -30C..."*
-3. In the Editor, find `30W (TBR-UCB-110)` and change it to `25W`
-4. Click **Apply**
-5. The page re-renders showing the updated value
+2. Click directly on the text overlay containing the table data (not the table zone box):
+   Look for the overlay showing *"Characteristic Setting Power 30W (TBR-UCB-110)..."*
+3. The **Editor** tab shows the full text block
+4. Find `30W (TBR-UCB-110)` and change it to `25W`
+5. Click **Apply**
+6. The page re-renders showing the updated value
+
+**Tip:** If the table zone editor opens instead (showing a grid), click outside it to deselect, then click the text overlay directly. Some tables are stored as text blocks rather than structured grids.
 
 **Note:** After resolving a TBR in the document text, go to the **TBDs** tab and update the item's status from "Open" to "Resolved" to keep the dashboard in sync.
 

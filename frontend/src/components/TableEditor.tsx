@@ -71,13 +71,14 @@ export function TableEditor({ yMin = 0, yMax = 9999 }: { yMin?: number; yMax?: n
         );
       }
 
-      // Update store state (edit count, undo availability)
-      const actions = await fetch("${API_BASE}/session/actions").then((r) => r.json());
-      useEditorStore.setState((state) => ({
-        editCount: state.editCount + 1,
+      // Update store state (edit count, undo availability, trigger refresh)
+      const actions = await fetch(`${API_BASE}/session/actions`).then((r) => r.json());
+      useEditorStore.setState({
+        editCount: useEditorStore.getState().editCount + 1,
         canUndo: actions.undo_available,
         canRedo: actions.redo_available,
-      }));
+        refreshTrigger: Date.now(),
+      });
     }
     setEditingCell(null);
   };

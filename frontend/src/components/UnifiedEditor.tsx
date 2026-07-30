@@ -171,7 +171,7 @@ export function UnifiedEditor({ width }: { width: number }) {
 
     setSelected({ ...selected, text: editText });
 
-    const actions = await fetch("${API_BASE}/session/actions").then((r) => r.json());
+    const actions = await fetch(`${API_BASE}/session/actions`).then((r) => r.json());
     // Use Date.now() to guarantee a unique value that always changes
     useEditorStore.setState({
       editCount: useEditorStore.getState().editCount + 1,

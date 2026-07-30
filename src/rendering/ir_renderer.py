@@ -108,13 +108,16 @@ def render_ir_to_pdf(
 def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
     """Convert Document IR text blocks to renderable TextElements.
 
-    Used for pages that have no source PDF equivalent (created by page split).
+    Used for pages that have no source PDF equivalent (created by page split)
+    or edited pages that need re-rendering.
+    Filters out overlapping blocks to prevent visual corruption.
     """
     from src.rendering.elements import TextElement
 
     elements: list[PageElement] = []
+    rendered_regions: list[tuple[float, float, float, float]] = []  # x0, y0, x1, y1
 
-    for block in page_info.text_blocks:
+    for block in sorted(page_info.text_blocks, key=lambda b: (b.bbox.y0, b.bbox.x0)):
         font_size = 10.0
         bold = False
         italic = False
@@ -128,22 +131,27 @@ def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
             if block.style.font_name:
                 font_name = block.style.font_name
 
-        # For table-like blocks, expand bbox height to fit reformatted content
-        formatted_text = _format_block_text(block)
-        line_count = formatted_text.count("\n") + 1
-        min_height = line_count * (font_size * 1.4)  # line height ~1.4x font size
-        block_height = block.bbox.y1 - block.bbox.y0
-        actual_height = max(block_height, min_height)
+        # Skip blocks that significantly overlap an already-rendered region
+        # (prevents table fragment duplication)
+        bbox = block.bbox
+        overlaps = False
+        for (rx0, ry0, rx1, ry1) in rendered_regions:
+            # Check if this block's center is inside an existing region
+            center_y = (bbox.y0 + bbox.y1) / 2
+            center_x = (bbox.x0 + bbox.x1) / 2
+            if rx0 <= center_x <= rx1 and ry0 <= center_y <= ry1:
+                overlaps = True
+                break
+
+        if overlaps:
+            continue
+
+        rendered_regions.append((bbox.x0, bbox.y0, bbox.x1, bbox.y1))
 
         elements.append(
             TextElement(
-                text=formatted_text,
-                bbox=BoundingBox(
-                    x0=block.bbox.x0,
-                    y0=block.bbox.y0,
-                    x1=block.bbox.x1,
-                    y1=block.bbox.y0 + actual_height,
-                ),
+                text=_format_block_text(block),
+                bbox=block.bbox,
                 font_name=font_name,
                 font_size_pt=font_size,
                 bold=bold,
@@ -157,32 +165,8 @@ def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
 
 
 def _format_block_text(block) -> str:
-    """Format block text for rendering.
-
-    Detects table-like content: blocks preceded by a caption that contain
-    newline-separated key-value pairs. Renders them as a simple 2-column table.
-    """
-    text = block.text_verbatim
-    lines = [l for l in text.split("\n") if l.strip()]
-
-    # Only format as table if:
-    # 1. Block type is paragraph (not heading, caption, etc.)
-    # 2. Has at least 4 non-empty lines
-    # 3. All lines are short (under 40 chars) — actual table cells
-    # 4. Even number of lines (key-value pairs)
-    if (block.block_type == "paragraph"
-            and len(lines) >= 4
-            and len(lines) % 2 == 0
-            and all(len(l.strip()) < 40 for l in lines)):
-        # Format as 2-column aligned table
-        rows = []
-        for i in range(0, len(lines), 2):
-            key = lines[i].strip()
-            val = lines[i + 1].strip()
-            rows.append(f"{key:.<30s} {val}")
-        return "\n".join(rows)
-
-    return text
+    """Format block text for rendering. Alpha: plain text only (no table formatting)."""
+    return block.text_verbatim
 
 
 def _find_edited_pages(

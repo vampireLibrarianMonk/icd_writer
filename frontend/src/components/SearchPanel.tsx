@@ -85,11 +85,22 @@ export function SearchPanel() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "12px" }}>
       {/* Header */}
-      <div style={{ marginBottom: "12px" }}>
-        <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>ICD Search</h3>
-        <p style={{ margin: "4px 0 0", fontSize: "11px", color: "var(--text-secondary)" }}>
-          Ask questions about your ICDs in plain language
-        </p>
+      <div style={{ marginBottom: "12px", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>ICD Search</h3>
+          <p style={{ margin: "4px 0 0", fontSize: "11px", color: "var(--text-secondary)" }}>
+            Ask questions about your ICDs in plain language
+          </p>
+        </div>
+        {history.length > 0 && (
+          <button
+            onClick={() => { setHistory([]); setError(null); }}
+            title="Clear search history"
+            style={{ fontSize: "11px", padding: "3px 8px" }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {/* Results area */}

@@ -91,6 +91,73 @@ def create_app() -> FastAPI:
         session.record(ActionType.DOCUMENT_SAVED)
         return {"saved_to": str(journal_path)}
 
+    # ─── Cost Tracking ─────────────────────────────────────────────
+
+    @app.get("/session/costs")
+    def get_session_costs():
+        """Return the current session's cost ledger."""
+        session = state["session"]
+        if not session:
+            return {"total_cost_usd": 0.0, "entries": [], "entry_count": 0}
+
+        return {
+            "total_cost_usd": round(session.total_cost_usd, 6),
+            "entry_count": len(session.cost_ledger),
+            "entries": [
+                {
+                    "id": e.id,
+                    "timestamp": e.timestamp.isoformat(),
+                    "operation": e.operation,
+                    "description": e.description,
+                    "model": e.model,
+                    "tokens_in": e.tokens_in,
+                    "tokens_out": e.tokens_out,
+                    "chunks_processed": e.chunks_processed,
+                    "cost_usd": round(e.cost_usd, 6),
+                }
+                for e in session.cost_ledger
+            ],
+            "summary": _cost_summary(session),
+        }
+
+    @app.get("/session/costs/export")
+    def export_session_costs():
+        """Export the cost ledger as a downloadable CSV."""
+        from fastapi.responses import Response
+
+        session = state["session"]
+        if not session:
+            raise HTTPException(404, "No active session")
+
+        lines = [
+            "timestamp,operation,description,model,tokens_in,tokens_out,chunks,cost_usd"
+        ]
+        for e in session.cost_ledger:
+            desc = e.description.replace(",", ";")
+            lines.append(
+                f"{e.timestamp.isoformat()},{e.operation},{desc},{e.model},"
+                f"{e.tokens_in},{e.tokens_out},{e.chunks_processed},{e.cost_usd:.6f}"
+            )
+        lines.append("")
+        lines.append(f"# Total:,,,,,,,{session.total_cost_usd:.6f}")
+        lines.append(f"# Session:,{session.session_id}")
+        lines.append(f"# Started:,{session.started_at.isoformat()}")
+
+        csv_content = "\n".join(lines)
+        filename = f"cost_receipt_{session.session_id}.csv"
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    def _cost_summary(session) -> dict:
+        """Summarize costs by category."""
+        by_op: dict[str, float] = {}
+        for e in session.cost_ledger:
+            by_op[e.operation] = by_op.get(e.operation, 0.0) + e.cost_usd
+        return {k: round(v, 6) for k, v in by_op.items()}
+
     # ─── Document ──────────────────────────────────────────────────
 
     @app.post("/document/upload")
@@ -257,7 +324,24 @@ def create_app() -> FastAPI:
                     progress_cb = make_progress_cb(config_base_pct, config_pct_range, cfg.name)
                     result = pipeline.ingest_document(ir_path, configs=[cfg], progress_callback=progress_cb)
                     index_results.update(result)
-                    total_chunks_all_configs += sum(result.values())
+                    chunks_this_config = sum(result.values())
+                    total_chunks_all_configs += chunks_this_config
+
+                    # Record cost for this config's embedding
+                    session = state.get("session")
+                    if session and chunks_this_config > 0:
+                        # Estimate: ~50 tokens per chunk average
+                        est_tokens = chunks_this_config * 50
+                        cost_per_1k = cfg.embedding_config.cost_per_1k_tokens
+                        est_cost = (est_tokens / 1000) * cost_per_1k
+                        session.record_cost(
+                            operation="embedding",
+                            description=f"Upload & Index: {pdf_path.name} ({cfg.name})",
+                            model=cfg.embedding_config.provider.value,
+                            cost_usd=est_cost,
+                            tokens_in=est_tokens,
+                            chunks_processed=chunks_this_config,
+                        )
 
                 total_chunks = total_chunks_all_configs
                 status.update({
@@ -1679,6 +1763,20 @@ def create_app() -> FastAPI:
             from src.search.rag import RAGPipeline
             pipeline = RAGPipeline(search_config=search_config, region="us-east-1")
             answer = pipeline.ask(query, k=k, mode=retrieval_mode)
+
+            # Record RAG cost
+            session = state.get("session")
+            if session and answer.cost_usd > 0:
+                session.record_cost(
+                    operation="rag_generation",
+                    description=f"Search (RAG): \"{query[:60]}\"",
+                    model=answer.model_id or "us.amazon.nova-pro-v1:0",
+                    cost_usd=answer.cost_usd,
+                    tokens_in=answer.tokens_in,
+                    tokens_out=answer.tokens_out,
+                    chunks_processed=answer.chunks_used,
+                )
+
             return {
                 "type": "rag",
                 "query": query,

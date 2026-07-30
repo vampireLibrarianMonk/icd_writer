@@ -119,6 +119,15 @@ export const api = {
     return res.json();
   },
 
+  async getSessionCosts(): Promise<any> {
+    const res = await fetch(`${API_BASE}/session/costs`);
+    return res.json();
+  },
+
+  getSessionCostsExportUrl(): string {
+    return `${API_BASE}/session/costs/export`;
+  },
+
   async getRelatedVersions(pdfPath: string): Promise<any> {
     const res = await fetch(`${API_BASE}/documents/related?pdf_path=${encodeURIComponent(pdfPath)}`);
     return res.json();

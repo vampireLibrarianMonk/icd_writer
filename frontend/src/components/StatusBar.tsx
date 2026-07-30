@@ -1,4 +1,6 @@
 import { useEditorStore } from "../store/editorStore";
+import { api } from "../api/client";
+import { useState, useEffect } from "react";
 import type { IngestStatus } from "../api/client";
 
 interface StatusBarProps {
@@ -8,6 +10,31 @@ interface StatusBarProps {
 export function StatusBar({ ingestStatus }: StatusBarProps) {
   const { documentLoaded, documentPath, totalPages, currentPage, editCount, sessionId } =
     useEditorStore();
+  const [totalCost, setTotalCost] = useState(0);
+
+  // Poll costs every 5 seconds when session is active
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const fetchCost = () => {
+      api.getSessionCosts().then((data) => {
+        setTotalCost(data.total_cost_usd || 0);
+      }).catch(() => {});
+    };
+
+    fetchCost();
+    const interval = setInterval(fetchCost, 5000);
+    return () => clearInterval(interval);
+  }, [sessionId]);
+
+  // Also refresh after ingest completes
+  useEffect(() => {
+    if (ingestStatus?.done) {
+      api.getSessionCosts().then((data) => {
+        setTotalCost(data.total_cost_usd || 0);
+      }).catch(() => {});
+    }
+  }, [ingestStatus?.done]);
 
   return (
     <div style={{
@@ -90,9 +117,27 @@ export function StatusBar({ ingestStatus }: StatusBarProps) {
             {documentPath.split("/").pop()} — {totalPages} pages — Page {currentPage}
           </span>
         )}
-        <span>
+        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {documentLoaded && editCount > 0 && `${editCount} unsaved edit${editCount > 1 ? "s" : ""} · `}
           {sessionId && `Session: ${sessionId.slice(0, 8)}`}
+          {totalCost > 0 && (
+            <>
+              <span style={{ borderLeft: "1px solid var(--border, #ccc)", height: "12px", margin: "0 4px" }} />
+              <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>
+                ${totalCost.toFixed(4)}
+              </span>
+              <button
+                onClick={() => window.location.href = api.getSessionCostsExportUrl()}
+                title="Download itemized cost receipt (CSV)"
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  padding: "0 2px", fontSize: "12px", color: "var(--text-secondary)",
+                }}
+              >
+                📥
+              </button>
+            </>
+          )}
         </span>
       </div>
     </div>

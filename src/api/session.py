@@ -46,6 +46,20 @@ class Action(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class CostEntry(BaseModel):
+    """A single cost line item from a Bedrock API call."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    operation: str  # "embedding", "rag_generation", "ocr"
+    description: str  # "Upload & Index: 20130010957.pdf (paragraph)"
+    model: str  # "amazon.titan-embed-text-v2:0"
+    tokens_in: int = 0
+    tokens_out: int = 0
+    chunks_processed: int = 0
+    cost_usd: float = 0.0
+
+
 class Session(BaseModel):
     """A user editing session with full action journal."""
 
@@ -56,6 +70,7 @@ class Session(BaseModel):
     actions: list[Action] = Field(default_factory=list)
     undo_stack: list[Action] = Field(default_factory=list)
     redo_stack: list[Action] = Field(default_factory=list)
+    cost_ledger: list[CostEntry] = Field(default_factory=list)
 
     def record(self, action_type: ActionType, **kwargs: Any) -> Action:
         """Record an action and clear the redo stack."""
@@ -88,6 +103,27 @@ class Session(BaseModel):
     def edit_count(self) -> int:
         """Number of edit actions in this session."""
         return sum(1 for a in self.actions if a.action_type == ActionType.BLOCK_EDITED)
+
+    @property
+    def total_cost_usd(self) -> float:
+        """Total cost accumulated this session."""
+        return sum(e.cost_usd for e in self.cost_ledger)
+
+    def record_cost(self, operation: str, description: str, model: str,
+                    cost_usd: float, tokens_in: int = 0, tokens_out: int = 0,
+                    chunks_processed: int = 0) -> CostEntry:
+        """Record a cost line item."""
+        entry = CostEntry(
+            operation=operation,
+            description=description,
+            model=model,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            chunks_processed=chunks_processed,
+            cost_usd=cost_usd,
+        )
+        self.cost_ledger.append(entry)
+        return entry
 
     def save_journal(self, path: Path | str) -> None:
         """Persist the full session journal to disk."""

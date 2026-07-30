@@ -159,37 +159,28 @@ def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
 def _format_block_text(block) -> str:
     """Format block text for rendering.
 
-    Detects table-like content (newline-separated key-value pairs)
-    and formats it with spacing to approximate tabular layout.
+    Detects table-like content: blocks preceded by a caption that contain
+    newline-separated key-value pairs. Renders them as a simple 2-column table.
     """
     text = block.text_verbatim
-    lines = text.split("\n")
+    lines = [l for l in text.split("\n") if l.strip()]
 
-    # Detect table pattern: alternating key/value lines (short lines, no sentences)
-    if len(lines) >= 4 and all(len(l.strip()) < 40 for l in lines if l.strip()):
-        # Check if it looks like key-value pairs (even lines are keys, odd are values)
-        # Or header row followed by data rows
-        is_tabular = True
-        for line in lines:
-            if len(line.strip()) > 60:
-                is_tabular = False
-                break
-
-        if is_tabular:
-            # Format as aligned columns with padding
-            formatted_lines = []
-            i = 0
-            while i < len(lines):
-                line = lines[i].strip()
-                if line:
-                    # Check if next line is a value (short, no colon)
-                    if i + 1 < len(lines) and lines[i + 1].strip() and len(lines[i + 1].strip()) < 30:
-                        formatted_lines.append(f"{line:30s} {lines[i + 1].strip()}")
-                        i += 2
-                        continue
-                    formatted_lines.append(line)
-                i += 1
-            return "\n".join(formatted_lines)
+    # Only format as table if:
+    # 1. Block type is paragraph (not heading, caption, etc.)
+    # 2. Has at least 4 non-empty lines
+    # 3. All lines are short (under 40 chars) — actual table cells
+    # 4. Even number of lines (key-value pairs)
+    if (block.block_type == "paragraph"
+            and len(lines) >= 4
+            and len(lines) % 2 == 0
+            and all(len(l.strip()) < 40 for l in lines)):
+        # Format as 2-column aligned table
+        rows = []
+        for i in range(0, len(lines), 2):
+            key = lines[i].strip()
+            val = lines[i + 1].strip()
+            rows.append(f"{key:.<30s} {val}")
+        return "\n".join(rows)
 
     return text
 

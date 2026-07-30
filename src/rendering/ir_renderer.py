@@ -161,12 +161,69 @@ def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
             )
         )
 
+    # Add table grid lines for table-data blocks
+    _add_table_lines(page_info, elements)
+
     return elements
 
 
 def _format_block_text(block) -> str:
-    """Format block text for rendering. Alpha: plain text only (no table formatting)."""
+    """Format block text for rendering. Plain text passthrough."""
     return block.text_verbatim
+
+
+def _add_table_lines(page_info, elements):
+    """Add horizontal and vertical lines for table-like blocks.
+
+    Detects blocks that are preceded by a caption and contain
+    short newline-separated data (table cells). Draws grid lines.
+    """
+    from src.rendering.elements import LineElement
+
+    blocks = sorted(page_info.text_blocks, key=lambda b: b.bbox.y0)
+
+    for i, block in enumerate(blocks):
+        # Identify table data blocks: paragraph type, preceded by a caption
+        if block.block_type != "paragraph":
+            continue
+
+        # Check if previous block is a caption
+        has_caption_above = False
+        for prev in blocks:
+            if prev.block_type == "caption" and prev.bbox.y1 <= block.bbox.y0 and (block.bbox.y0 - prev.bbox.y1) < 15:
+                has_caption_above = True
+                break
+
+        if not has_caption_above:
+            continue
+
+        # This is a table data block — draw grid lines
+        lines_in_block = [l for l in block.text_verbatim.split("\n") if l.strip()]
+        if len(lines_in_block) < 2:
+            continue
+
+        x0 = block.bbox.x0
+        x1 = block.bbox.x1
+        y0 = block.bbox.y0
+        y1 = block.bbox.y1
+        line_height = (y1 - y0) / max(len(lines_in_block), 1)
+        mid_x = (x0 + x1) / 2  # Column divider at midpoint
+
+        # Top border
+        elements.append(LineElement(x1=x0, y1=y0, x2=x1, y2=y0, color="#000000", width=0.75))
+        # Bottom border
+        elements.append(LineElement(x1=x0, y1=y1, x2=x1, y2=y1, color="#000000", width=0.75))
+        # Left border
+        elements.append(LineElement(x1=x0, y1=y0, x2=x0, y2=y1, color="#000000", width=0.75))
+        # Right border
+        elements.append(LineElement(x1=x1, y1=y0, x2=x1, y2=y1, color="#000000", width=0.75))
+        # Column divider
+        elements.append(LineElement(x1=mid_x, y1=y0, x2=mid_x, y2=y1, color="#000000", width=0.5))
+
+        # Row dividers
+        for row_idx in range(1, len(lines_in_block)):
+            row_y = y0 + row_idx * line_height
+            elements.append(LineElement(x1=x0, y1=row_y, x2=x1, y2=row_y, color="#888888", width=0.5))
 
 
 def _find_edited_pages(

@@ -161,41 +161,86 @@ Use the status dropdown on each item to track progress: Open → Assigned → Re
 
 ## 4. Editing and Page Extension
 
-Edit text blocks directly in the PDF. If edits overflow a page, the system creates a new page.
+Edit text blocks directly in the PDF. If edits expand content past the page boundary, the system automatically creates a new page.
 
 ### Document: `HSI_SYS_015G.pdf` (already loaded from Step 3)
 
-**Steps — Basic Edit:**
+---
 
-1. Navigate to **page 4** using the page controls
-2. Click any paragraph block in the body area — it highlights in blue
-3. The **Editor** tab activates with the selected text
-4. Modify the text (e.g., change a value or add a sentence)
-5. Click **Apply** — the document view updates immediately
-6. **File > Undo** (or Ctrl+Z) reverts the change
+### 4.1 Basic Paragraph Edit
 
-**Steps — Triggering Page Extension:**
+1. Navigate to **page 4** (Section 1 — Introduction)
+2. Click the paragraph that begins: *"This document shall describe the interface between the HESSI spacecraft bus..."*
+3. The **Editor** tab activates showing the selected text
+4. Change the text to: *"This document describes the complete interface specification between the HESSI spacecraft bus and the instrument Spectrometer (AKA Cryostat), including mechanical, thermal, and electrical interfaces."*
+5. Click **Apply**
+6. The document view updates — the paragraph now shows your revised text
+7. **File > Undo** reverts to the original
 
-1. On page 4, click a body paragraph block
-2. Replace the text with a very long passage:
-   ```
-   The spectrometer thermal requirement shall be verified under all operating conditions.
-   ```
-   (Paste this sentence 50+ times to create a massive block)
-3. Click **Apply**
-4. Observe:
-   - The total page count increases (shown in the status bar)
-   - The API response shows `page_added: true`
-   - Navigate to the new page — it contains the overflowing content
+---
+
+### 4.2 Editing a Requirement (TBR Value)
+
+1. Navigate to **page 5** (Section 2.4.1 — Cryocooler)
+2. Click the paragraph containing: *"...will not exceed (TBR-UCB-102) newtons driven at 59 Hz."*
+3. In the Editor, replace `(TBR-UCB-102)` with `0.5` to resolve the TBR:
+   *"...will not exceed 0.5 newtons driven at 59 Hz."*
+4. Click **Apply**
+5. The value is now resolved in the document view
+
+---
+
+### 4.3 Editing a Table Value
+
+1. Navigate to **page 7** (Section 3.2.1 — Spectrometer Heaters)
+2. Click the table area showing "Table 3.2.1-1 Spectrometer Thermostat Characteristics"
+3. The table editor opens showing the thermostat settings:
+   - Power: 30W (TBR-UCB-110)
+   - Turn-on Temperature: -30C
+   - Turn-off Temperature: -20C
+4. Click the cell containing `30W (TBR-UCB-110)`
+5. Change it to `25W` to resolve the TBR
+6. Click **Apply**
+
+---
+
+### 4.4 Triggering Page Extension (Overflow)
+
+When an edit makes a block too large for the remaining page space, overflowing content moves to a new page.
+
+1. Navigate to **page 4** (Introduction)
+2. Click the paragraph starting with: *"The Spectrometer consists of a Cryostat that houses the nine Germanium detectors..."*
+3. Replace the text with a much longer passage — paste this 5 times:
+
+   > The Spectrometer consists of a Cryostat that houses nine segmented high-purity Germanium detectors that provide primary science data across the energy range of 3 keV to 17 MeV. These detectors are actively cooled to liquid nitrogen temperatures (approximately 77K) by the helium-based Stirling cycle mechanical cryocooler. The cooler is electrically driven by the Cooler Power Controller (CPC), which in turn is commanded and monitored by the Instrument Data Processing Unit (IDPU). The Spectrometer assembly also includes the attenuator shutter mechanism for managing photon rates during solar flares, the Charge Sensitive Amplifiers (CSA) for signal conditioning, and the High Voltage Filters for detector biasing, all mounted externally on the Cryostat structure.
+
+4. Click **Apply**
+5. Observe:
+   - The status bar shows the page count increased (e.g., "9 pages" instead of "8 pages")
+   - Blocks that were pushed below the page margin are now on the new page
+   - Navigate forward one page to see the displaced content
 
 **What moves to the new page:**
-- Paragraph blocks that overflow the bottom margin
-- List items and captions
-- Tables that extend past the boundary
 
-**What stays:**
-- Headers and footers (fixed position)
-- Section headings (anchor the page structure)
+| Block Type | Behavior |
+|-----------|----------|
+| Paragraphs | Moved if they overflow the bottom margin |
+| List items | Moved (stay grouped with nearby items) |
+| Captions | Moved (travel with their associated content) |
+| Tables | Moved if they extend past the boundary |
+| Headings | Stay on the original page (anchor the structure) |
+| Headers/Footers | Never moved (fixed position) |
+
+---
+
+### 4.5 Undo and Redo
+
+All edits support undo/redo:
+
+- **File > Undo** (or Ctrl+Z) — reverts the last change
+- **File > Redo** (or Ctrl+Y) — re-applies an undone change
+- The undo stack tracks each individual edit
+- Page extensions are also undone (the extra page is removed)
 
 ---
 

@@ -45,7 +45,7 @@ Upload a PDF to extract its structure, index it for search, and detect TBD/TBR i
 
 ---
 
-## 2. Search and RAG
+## 2. AI-Powered Search
 
 Ask natural language questions across all indexed documents. Answers come with citations.
 

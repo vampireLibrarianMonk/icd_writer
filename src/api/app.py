@@ -1059,35 +1059,23 @@ def create_app() -> FastAPI:
         # Check if page is edited — if so, return elements from Document IR directly
         page_idx = page_number - 1
         if page_idx < len(doc_ir.pages):
-            doc = fitz.open(session.document_path)
-            if page_number <= len(doc):
-                source_text = doc[page_idx].get_text("text")
-                ir_text = "\n".join(
-                    b.text_verbatim for b in doc_ir.pages[page_idx].text_blocks
-                )
-                page_edited = " ".join(source_text.split()) != " ".join(ir_text.split())
-            else:
-                page_edited = True  # New page (from split)
-            doc.close()
-
-            if page_edited:
-                # Return elements from the Document IR
-                page_info = doc_ir.pages[page_idx]
-                elements = []
-                for block in page_info.text_blocks:
-                    elements.append({
-                        "type": block.block_type,
-                        "label": block.block_type,
-                        "text": block.text_verbatim,
-                        "id": block.id,
-                        "bbox": {
-                            "x0": block.bbox.x0,
-                            "y0": block.bbox.y0,
-                            "x1": block.bbox.x1,
-                            "y1": block.bbox.y1,
-                        },
-                    })
-                return {"page_number": page_number, "elements": elements}
+            # ALWAYS return from Document IR — it has block IDs and correct text
+            page_info = doc_ir.pages[page_idx]
+            elements = []
+            for block in page_info.text_blocks:
+                elements.append({
+                    "type": block.block_type,
+                    "label": block.block_type,
+                    "text": block.text_verbatim,
+                    "id": block.id,
+                    "bbox": {
+                        "x0": block.bbox.x0,
+                        "y0": block.bbox.y0,
+                        "x1": block.bbox.x1,
+                        "y1": block.bbox.y1,
+                    },
+                })
+            return {"page_number": page_number, "elements": elements}
 
         # Unedited page — extract from source PDF as before
         doc = fitz.open(session.document_path)

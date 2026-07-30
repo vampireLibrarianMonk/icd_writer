@@ -38,10 +38,10 @@ Upload a PDF to extract its structure, index it for search, and detect TBD/TBR i
 | 4 | Detecting TBD/TBR items | Regex + context scan for unresolved markers |
 | 5 | Complete! 15 pages, 215 chunks indexed, 0 TBDs | Summary of what was processed |
 
-4. The document automatically opens in the viewer when processing completes
-5. The **Open Document** dropdown now shows `20130010957.pdf` for future sessions
+4. Click **Open Document** — the PDF loads in the viewer
+5. The document now appears in the **Open Document** dropdown for future sessions
 
-**Expected result:** The document is searchable, viewable, and editable — no manual open step required.
+**Expected result:** The document is searchable, viewable, and editable. The dropdown shows `20130010957.pdf`.
 
 ---
 
@@ -54,7 +54,7 @@ Ask natural language questions across all indexed documents. Answers come with c
 **Steps:**
 
 1. Click the **Search** tab (right panel)
-2. RAG mode is on by default (toggle visible above the input)
+2. The "AI answers with citations" checkbox is enabled by default
 3. Type a query and press Enter
 
 ### Queries to Try
@@ -72,7 +72,7 @@ Ask natural language questions across all indexed documents. Answers come with c
 - Confidence indicator (high/medium/low)
 - Cost and timing metadata
 
-**Toggle RAG off** to see raw search hits instead — ranked chunks with scores, page numbers, and text previews.
+**Uncheck "AI answers with citations"** to see raw search hits instead — ranked chunks with scores, page numbers, and text previews.
 
 ---
 

@@ -38,10 +38,10 @@ Upload a PDF to extract its structure, index it for search, and detect TBD/TBR i
 | 4 | Detecting TBD/TBR items | Regex + context scan for unresolved markers |
 | 5 | Complete! 15 pages, 215 chunks indexed, 0 TBDs | Summary of what was processed |
 
-4. Click **Open Document** — the PDF loads in the viewer
-5. The document now appears in the **Open Document** dropdown for future sessions
+4. The document automatically opens in the viewer when processing completes
+5. The **Open Document** dropdown now shows `20130010957.pdf` for future sessions
 
-**Expected result:** The document is searchable, viewable, and editable. The dropdown shows `20130010957.pdf`.
+**Expected result:** The document is searchable, viewable, and editable — no manual open step required.
 
 ---
 

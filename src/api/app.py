@@ -786,25 +786,96 @@ def create_app() -> FastAPI:
 
     @app.get("/document/page/{page_number}/image")
     def get_page_image(page_number: int):
-        """Render a page as PNG image for the viewer."""
+        """Render a page as PNG image for the viewer.
+
+        If the page has been edited, re-renders from Document IR via WeasyPrint.
+        Otherwise serves the original PDF page directly (fast).
+        """
         import fitz
         from fastapi.responses import Response
 
         session = state["session"]
+        doc_ir = state["document_ir"]
         if not session or not session.document_path:
             raise HTTPException(404, "No document loaded")
 
-        doc = fitz.open(session.document_path)
+        source_path = session.document_path
+        doc = fitz.open(source_path)
         if page_number < 1 or page_number > len(doc):
             doc.close()
             raise HTTPException(400, f"Invalid page: {page_number}")
 
-        page = doc[page_number - 1]
-        pix = page.get_pixmap(dpi=150)
-        img_bytes = pix.tobytes("png")
-        doc.close()
+        # Check if this page has been edited by comparing IR text to source
+        page_edited = False
+        if doc_ir and page_number <= len(doc_ir.pages):
+            page_idx = page_number - 1
+            source_text = doc[page_idx].get_text("text")
+            ir_text = "\n".join(
+                b.text_verbatim for b in doc_ir.pages[page_idx].text_blocks
+            )
+            if " ".join(source_text.split()) != " ".join(ir_text.split()):
+                page_edited = True
 
-        return Response(content=img_bytes, media_type="image/png")
+        if page_edited:
+            # Re-render from IR using WeasyPrint
+            doc.close()
+            try:
+                from weasyprint import HTML
+                from src.rendering.extract import extract_page_elements
+                from src.rendering.renderer import render_page_to_html
+                from src.rendering.elements import TextElement
+
+                page_info = doc_ir.pages[page_number - 1]
+                page_width, page_height, elements = extract_page_elements(
+                    source_path, page_number
+                )
+
+                # Patch edited text blocks into elements
+                patched = []
+                for elem in elements:
+                    if isinstance(elem, TextElement):
+                        for block in page_info.text_blocks:
+                            if (abs(block.bbox.x0 - elem.bbox.x0) < 1
+                                    and abs(block.bbox.y0 - elem.bbox.y0) < 1):
+                                if block.text_verbatim != elem.text:
+                                    elem = TextElement(
+                                        text=block.text_verbatim,
+                                        bbox=elem.bbox,
+                                        font_name=elem.font_name,
+                                        font_size_pt=elem.font_size_pt,
+                                        bold=elem.bold,
+                                        italic=elem.italic,
+                                        color=elem.color,
+                                        char_positions=None,
+                                    )
+                                break
+                    patched.append(elem)
+
+                html_content = render_page_to_html(page_width, page_height, patched)
+                pdf_bytes = HTML(string=html_content).write_pdf()
+
+                # Convert PDF page to PNG
+                rendered_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                pix = rendered_doc[0].get_pixmap(dpi=150)
+                img_bytes = pix.tobytes("png")
+                rendered_doc.close()
+
+                return Response(content=img_bytes, media_type="image/png")
+            except Exception:
+                # Fallback to source on render failure
+                doc = fitz.open(source_path)
+                page = doc[page_number - 1]
+                pix = page.get_pixmap(dpi=150)
+                img_bytes = pix.tobytes("png")
+                doc.close()
+                return Response(content=img_bytes, media_type="image/png")
+        else:
+            # Unedited page — serve directly from source PDF (fast)
+            page = doc[page_number - 1]
+            pix = page.get_pixmap(dpi=150)
+            img_bytes = pix.tobytes("png")
+            doc.close()
+            return Response(content=img_bytes, media_type="image/png")
 
     @app.get("/document/page/{page_number}/analysis")
     def get_page_analysis(page_number: int):

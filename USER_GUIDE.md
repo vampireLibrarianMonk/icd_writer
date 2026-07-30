@@ -129,14 +129,15 @@ Track unresolved items across all indexed documents with status management.
 
 1. **File > Upload & Index...** → select `icds/digital/HSI_SYS_015G.pdf`
 2. Wait for ingestion to complete (fast — 8 pages)
-3. Click the **TBDs** tab (right panel)
-4. Click **Refresh** if the dashboard is empty
+3. Click the **TBDs** tab (right panel) — items appear automatically since the ingest pipeline detected them
 
 **Expected result:**
 
 - 2 TBR items appear: `TBR-UCB-102` (page 5) and `TBR-UCB-110` (page 7)
 - Stats cards show: 2 Open, 0 Assigned, 0 Resolved
 - The "in shall statements" warning appears (these TBRs are contractually blocking)
+
+**Note:** If you're returning to a previous session where documents were already indexed, click **Refresh** to reload the TBD state from disk.
 
 ### Using the Filters
 

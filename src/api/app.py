@@ -860,7 +860,8 @@ def create_app() -> FastAPI:
                 img_bytes = pix.tobytes("png")
                 rendered_doc.close()
 
-                return Response(content=img_bytes, media_type="image/png")
+                return Response(content=img_bytes, media_type="image/png",
+                               headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
             except Exception:
                 # Fallback to source on render failure
                 doc = fitz.open(source_path)
@@ -868,14 +869,16 @@ def create_app() -> FastAPI:
                 pix = page.get_pixmap(dpi=150)
                 img_bytes = pix.tobytes("png")
                 doc.close()
-                return Response(content=img_bytes, media_type="image/png")
+                return Response(content=img_bytes, media_type="image/png",
+                               headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
         else:
             # Unedited page — serve directly from source PDF (fast)
             page = doc[page_number - 1]
             pix = page.get_pixmap(dpi=150)
             img_bytes = pix.tobytes("png")
             doc.close()
-            return Response(content=img_bytes, media_type="image/png")
+            return Response(content=img_bytes, media_type="image/png",
+                           headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
     @app.get("/document/page/{page_number}/analysis")
     def get_page_analysis(page_number: int):

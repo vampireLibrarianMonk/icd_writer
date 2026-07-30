@@ -22,12 +22,12 @@ export function Toolbar({ onFileUpload, onShowHelp }: ToolbarProps) {
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const fileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Load available documents on mount and after document state changes
+  // Load available documents on mount and after document changes
   useEffect(() => {
     api.listDocuments().then((res) => {
       setAvailableDocs(res.documents || []);
     }).catch(() => {});
-  }, [documentLoaded]);
+  }, [documentLoaded, documentPath]);
 
   // Close file menu on outside click
   useEffect(() => {

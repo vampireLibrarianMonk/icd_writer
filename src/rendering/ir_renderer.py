@@ -83,37 +83,11 @@ def render_ir_to_pdf(
             single_doc.close()
 
         elif page_num in edited_pages:
-            # Re-render this page (has edits)
+            # Re-render this page entirely from IR (has edits)
             page_info = document_ir.pages[page_idx]
-            page_width, page_height, elements = extract_page_elements(
-                source_pdf, page_num
-            )
-
-            # Patch edited text blocks
-            patched_elements = []
-            for elem in elements:
-                if isinstance(elem, TextElement):
-                    for block in page_info.text_blocks:
-                        if (
-                            abs(block.bbox.x0 - elem.bbox.x0) < 1
-                            and abs(block.bbox.y0 - elem.bbox.y0) < 1
-                        ):
-                            if block.text_verbatim != elem.text:
-                                elem = TextElement(
-                                    text=block.text_verbatim,
-                                    bbox=elem.bbox,
-                                    font_name=elem.font_name,
-                                    font_size_pt=elem.font_size_pt,
-                                    bold=elem.bold,
-                                    italic=elem.italic,
-                                    color=elem.color,
-                                    char_positions=None,
-                                )
-                            break
-                patched_elements.append(elem)
-
+            elements = _ir_blocks_to_elements(page_info)
             html_content = render_page_to_html(
-                page_width, page_height, patched_elements
+                page_info.width_pt, page_info.height_pt, elements
             )
             pdf_bytes = HTML(string=html_content).write_pdf()
 

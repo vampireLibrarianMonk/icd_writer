@@ -190,17 +190,16 @@ Edit text blocks directly in the PDF. If edits expand content past the page boun
 
 ---
 
-### 4.3 Editing a Table Value
+### 4.3 Editing Table Data (TBR in a Table)
 
 1. Navigate to **page 7** (Section 3.2.1 — Spectrometer Heaters)
-2. Click the table area showing "Table 3.2.1-1 Spectrometer Thermostat Characteristics"
-3. The table editor opens showing the thermostat settings:
-   - Power: 30W (TBR-UCB-110)
-   - Turn-on Temperature: -30C
-   - Turn-off Temperature: -20C
-4. Click the cell containing `30W (TBR-UCB-110)`
-5. Change it to `25W` to resolve the TBR
-6. Click **Apply**
+2. Click the text block containing the thermostat characteristics table:
+   *"Characteristic Setting Power 30W (TBR-UCB-110) Turn-on Temperature -30C..."*
+3. In the Editor, find `30W (TBR-UCB-110)` and change it to `25W`
+4. Click **Apply**
+5. The page re-renders showing the updated value
+
+**Note:** After resolving a TBR in the document text, go to the **TBDs** tab and update the item's status from "Open" to "Resolved" to keep the dashboard in sync.
 
 ---
 

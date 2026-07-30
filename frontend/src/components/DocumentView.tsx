@@ -10,7 +10,7 @@ interface Overlay {
 }
 
 export function DocumentView() {
-  const { pageData, currentPage, totalPages, goToPage, documentPath } = useEditorStore();
+  const { pageData, currentPage, totalPages, goToPage, documentPath, refreshTrigger } = useEditorStore();
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
@@ -56,7 +56,7 @@ export function DocumentView() {
       setOverlays(elems);
       setSelectedIdx(null);
     }).catch(() => setOverlays([]));
-  }, [currentPage, totalPages]);
+  }, [currentPage, totalPages, refreshTrigger]);
 
   // Listen for TBD navigation: highlight matching element on current page
   const [highlightText, setHighlightText] = useState<string | null>(null);
@@ -124,7 +124,7 @@ export function DocumentView() {
   }
 
   const scale = 0.75;
-  const pageImageUrl = `http://localhost:8000/document/page/${currentPage}/image`;
+  const pageImageUrl = `http://localhost:8000/document/page/${currentPage}/image?v=${refreshTrigger}`;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>

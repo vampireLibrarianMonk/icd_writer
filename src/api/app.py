@@ -41,7 +41,7 @@ def create_app() -> FastAPI:
     )
 
     # In-memory state (single-user MVP)
-    state = {"session": None, "document_ir": None, "config": ModelConfig()}
+    state = {"session": None, "document_ir": None, "config": ModelConfig(), "cost_ledger": []}
 
     # ─── Session ────────────────────────────────────────────────────
 
@@ -95,29 +95,22 @@ def create_app() -> FastAPI:
 
     @app.get("/session/costs")
     def get_session_costs():
-        """Return the current session's cost ledger."""
-        session = state["session"]
-        if not session:
-            return {"total_cost_usd": 0.0, "entries": [], "entry_count": 0}
+        """Return the current cost ledger (persists across session restarts)."""
+        from src.api.session import CostEntry
+
+        ledger = state["cost_ledger"]
+        total = sum(e["cost_usd"] for e in ledger)
+
+        # Summarize by operation
+        by_op: dict[str, float] = {}
+        for e in ledger:
+            by_op[e["operation"]] = by_op.get(e["operation"], 0.0) + e["cost_usd"]
 
         return {
-            "total_cost_usd": round(session.total_cost_usd, 6),
-            "entry_count": len(session.cost_ledger),
-            "entries": [
-                {
-                    "id": e.id,
-                    "timestamp": e.timestamp.isoformat(),
-                    "operation": e.operation,
-                    "description": e.description,
-                    "model": e.model,
-                    "tokens_in": e.tokens_in,
-                    "tokens_out": e.tokens_out,
-                    "chunks_processed": e.chunks_processed,
-                    "cost_usd": round(e.cost_usd, 6),
-                }
-                for e in session.cost_ledger
-            ],
-            "summary": _cost_summary(session),
+            "total_cost_usd": round(total, 6),
+            "entry_count": len(ledger),
+            "entries": ledger,
+            "summary": {k: round(v, 6) for k, v in by_op.items()},
         }
 
     @app.get("/session/costs/export")
@@ -125,38 +118,48 @@ def create_app() -> FastAPI:
         """Export the cost ledger as a downloadable CSV."""
         from fastapi.responses import Response
 
+        ledger = state["cost_ledger"]
         session = state["session"]
-        if not session:
-            raise HTTPException(404, "No active session")
 
         lines = [
             "timestamp,operation,description,model,tokens_in,tokens_out,chunks,cost_usd"
         ]
-        for e in session.cost_ledger:
-            desc = e.description.replace(",", ";")
+        for e in ledger:
+            desc = e["description"].replace(",", ";")
             lines.append(
-                f"{e.timestamp.isoformat()},{e.operation},{desc},{e.model},"
-                f"{e.tokens_in},{e.tokens_out},{e.chunks_processed},{e.cost_usd:.6f}"
+                f"{e['timestamp']},{e['operation']},{desc},{e['model']},"
+                f"{e['tokens_in']},{e['tokens_out']},{e['chunks_processed']},{e['cost_usd']:.6f}"
             )
+        total = sum(e["cost_usd"] for e in ledger)
         lines.append("")
-        lines.append(f"# Total:,,,,,,,{session.total_cost_usd:.6f}")
-        lines.append(f"# Session:,{session.session_id}")
-        lines.append(f"# Started:,{session.started_at.isoformat()}")
+        lines.append(f"# Total:,,,,,,,{total:.6f}")
+        if session:
+            lines.append(f"# Session:,{session.session_id}")
+            lines.append(f"# Started:,{session.started_at.isoformat()}")
 
         csv_content = "\n".join(lines)
-        filename = f"cost_receipt_{session.session_id}.csv"
+        filename = f"cost_receipt_{session.session_id if session else 'nosession'}.csv"
         return Response(
             content=csv_content,
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
-    def _cost_summary(session) -> dict:
-        """Summarize costs by category."""
-        by_op: dict[str, float] = {}
-        for e in session.cost_ledger:
-            by_op[e.operation] = by_op.get(e.operation, 0.0) + e.cost_usd
-        return {k: round(v, 6) for k, v in by_op.items()}
+    def _record_cost(operation: str, description: str, model: str,
+                     cost_usd: float, tokens_in: int = 0, tokens_out: int = 0,
+                     chunks_processed: int = 0) -> None:
+        """Record a cost entry to the app-level ledger."""
+        from datetime import datetime, timezone
+        state["cost_ledger"].append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "operation": operation,
+            "description": description,
+            "model": model,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "chunks_processed": chunks_processed,
+            "cost_usd": cost_usd,
+        })
 
     # ─── Document ──────────────────────────────────────────────────
 
@@ -328,13 +331,11 @@ def create_app() -> FastAPI:
                     total_chunks_all_configs += chunks_this_config
 
                     # Record cost for this config's embedding
-                    session = state.get("session")
-                    if session and chunks_this_config > 0:
-                        # Estimate: ~50 tokens per chunk average
+                    if chunks_this_config > 0:
                         est_tokens = chunks_this_config * 50
                         cost_per_1k = cfg.embedding_config.cost_per_1k_tokens
                         est_cost = (est_tokens / 1000) * cost_per_1k
-                        session.record_cost(
+                        _record_cost(
                             operation="embedding",
                             description=f"Upload & Index: {pdf_path.name} ({cfg.name})",
                             model=cfg.embedding_config.provider.value,
@@ -1765,9 +1766,8 @@ def create_app() -> FastAPI:
             answer = pipeline.ask(query, k=k, mode=retrieval_mode)
 
             # Record RAG cost
-            session = state.get("session")
-            if session and answer.cost_usd > 0:
-                session.record_cost(
+            if answer.cost_usd > 0:
+                _record_cost(
                     operation="rag_generation",
                     description=f"Search (RAG): \"{query[:60]}\"",
                     model=answer.model_id or "us.amazon.nova-pro-v1:0",

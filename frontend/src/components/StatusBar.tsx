@@ -12,10 +12,8 @@ export function StatusBar({ ingestStatus }: StatusBarProps) {
     useEditorStore();
   const [totalCost, setTotalCost] = useState(0);
 
-  // Poll costs every 5 seconds when session is active
+  // Poll costs every 5 seconds
   useEffect(() => {
-    if (!sessionId) return;
-
     const fetchCost = () => {
       api.getSessionCosts().then((data) => {
         setTotalCost(data.total_cost_usd || 0);
@@ -25,7 +23,7 @@ export function StatusBar({ ingestStatus }: StatusBarProps) {
     fetchCost();
     const interval = setInterval(fetchCost, 5000);
     return () => clearInterval(interval);
-  }, [sessionId]);
+  }, []);
 
   // Also refresh after ingest completes
   useEffect(() => {

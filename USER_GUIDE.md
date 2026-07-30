@@ -169,19 +169,19 @@ Edit text blocks directly in the PDF. If edits expand content past the page boun
 
 ### 4.1 Basic Paragraph Edit
 
-1. Navigate to **page 4** (Section 1 — Introduction)
-2. Click the paragraph that begins: *"This document shall describe the interface between the HESSI spacecraft bus..."*
+1. Navigate to **page 5** (Section 2 — Mechanical Interface)
+2. Click the paragraph that begins: *"An 'all sky' field of view is also desired for the detectors..."*
 3. The **Editor** tab activates showing the selected text
-4. Change the text to: *"This document describes the complete interface specification between the HESSI spacecraft bus and the instrument Spectrometer (AKA Cryostat), including mechanical, thermal, and electrical interfaces."*
+4. Change "reasonable effort" to "all reasonable effort" in the sentence
 5. Click **Apply**
-6. The document view updates — the paragraph now shows your revised text
+6. The document view updates with your revised text
 7. **File > Undo** reverts to the original
 
 ---
 
 ### 4.2 Editing a Requirement (TBR Value)
 
-1. Navigate to **page 5** (Section 2.4.1 — Cryocooler)
+1. Stay on **page 5** (Section 2.4.1 — Cryocooler)
 2. Click the paragraph containing: *"...will not exceed (TBR-UCB-102) newtons driven at 59 Hz."*
 3. In the Editor, replace `(TBR-UCB-102)` with `0.5` to resolve the TBR:
    *"...will not exceed 0.5 newtons driven at 59 Hz."*
@@ -208,8 +208,8 @@ Edit text blocks directly in the PDF. If edits expand content past the page boun
 
 When an edit makes a block too large for the remaining page space, overflowing content moves to a new page.
 
-1. Navigate to **page 4** (Introduction)
-2. Click the paragraph starting with: *"The Spectrometer consists of a Cryostat that houses the nine Germanium detectors..."*
+1. Navigate to **page 7** (Section 3.2.1 — Spectrometer Heaters)
+2. Click the paragraph starting with: *"the Cryostat. Cooler operation is controlled by the IDPU..."*
 3. Replace the text with a much longer passage — paste this 5 times:
 
    > The Spectrometer consists of a Cryostat that houses nine segmented high-purity Germanium detectors that provide primary science data across the energy range of 3 keV to 17 MeV. These detectors are actively cooled to liquid nitrogen temperatures (approximately 77K) by the helium-based Stirling cycle mechanical cryocooler. The cooler is electrically driven by the Cooler Power Controller (CPC), which in turn is commanded and monitored by the Instrument Data Processing Unit (IDPU). The Spectrometer assembly also includes the attenuator shutter mechanism for managing photon rates during solar flares, the Charge Sensitive Amplifiers (CSA) for signal conditioning, and the High Voltage Filters for detector biasing, all mounted externally on the Cryostat structure.

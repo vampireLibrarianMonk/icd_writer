@@ -57,20 +57,63 @@ Ask natural language questions across all indexed documents. Answers come with c
 2. The "AI answers with citations" checkbox is enabled by default
 3. Type a query and press Enter
 
-### Queries to Try
+### Example: "What triggers a conflict check in TSAFE?"
 
-| Query | Expected Answer |
-|-------|----------------|
-| "What triggers a conflict check in TSAFE?" | Track Update, Vector, and Altitude Amendments (cites page 8) |
-| "What is the input data format from radar?" | Radar data interface specification |
-| "How does TSAFE predict trajectories?" | Trajectory prediction algorithm details |
+**Answer (high confidence, 1939ms, $0.0028):**
 
-**What you'll see:**
+> Three record types trigger a conflict check in TSAFE: Track Update (TRK), Vector Amendment (VEC), and Altitude Amendment (ALT) [1][6].
+>
+> For Track Update (TRK), each record triggers an immediate check for conflicts between the flight for which the record applies and all other traffic in the Center [4][5].
+>
+> For Vector Amendment (VEC), each record triggers an immediate check for conflicts between the flight for which the record applies and all other traffic in the Center, unless the flight is under TSAFE control [7].
+>
+> For Altitude Amendment (ALT), each record triggers an immediate check for conflicts between the flight for which the record applies and all other traffic in the Center (unless the flight is under TSAFE control) [7].
 
-- A synthesized answer (not just raw results)
-- Inline citations: `[1] Document, Section, Page`
-- Confidence indicator (high/medium/low)
-- Cost and timing metadata
+**Sources cited:** 8 chunks from pages 7, 8, 10, 11, 13, 15
+
+---
+
+### Example: "What is the input data format from radar?"
+
+**Answer (high confidence, 1893ms, $0.0030):**
+
+> The input data format from radar consists of a line of standard ASCII text with data fields delimited by spaces. Multiple records can be sent in a single message by separating the records with semicolons. The data fields include:
+>
+> 1. Time/sec
+> 2. Flight ID
+> 3. Relative track time
+> 4. X coordinate in nautical miles (nmi)
+> 5. Y coordinate in nautical miles (nmi)
+> 6. Altitude in feet (ft)
+> 7. Groundspeed in knots (kn)
+> 8. Course angle in degrees (deg)
+> 9. Altitude rate in feet per minute (fpm)
+> 10. Sector number
+>
+> If TSAFE is configured to produce its own velocity estimates, it will ignore fields 7–9 (groundspeed, course angle, and altitude rate) [4][7].
+
+**Sources cited:** 8 chunks from pages 3, 7, 8, 11, 12
+
+---
+
+### Example: "How does TSAFE predict trajectories?"
+
+**Answer (high confidence, 1230ms, $0.0025):**
+
+> TSAFE predicts trajectories for approximately 3 minutes into the future [1]. It uses inputs such as flight registration data, route amendments, vector amendments, altitude amendments, track updates, wind data, and IFR/VFR status changes to make these predictions [3][4].
+
+**Sources cited:** 8 chunks from pages 3, 5, 7, 9, 13, 15
+
+---
+
+### How Search Results Work
+
+Each answer includes:
+- **Synthesized response** — plain English answer derived only from retrieved content
+- **Inline citations** — `[N]` referencing numbered source passages
+- **Confidence** — high/medium/low based on retrieval scores and answer coverage
+- **Cost and timing** — per-query Bedrock cost and response time
+- **Expandable sources** — click to see the raw text chunks that informed the answer
 
 **Uncheck "AI answers with citations"** to see raw search hits instead — ranked chunks with scores, page numbers, and text previews.
 

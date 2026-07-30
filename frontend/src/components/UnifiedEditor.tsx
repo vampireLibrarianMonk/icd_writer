@@ -170,12 +170,13 @@ export function UnifiedEditor({ width }: { width: number }) {
     setSelected({ ...selected, text: editText });
 
     const actions = await fetch("http://localhost:8000/session/actions").then((r) => r.json());
-    useEditorStore.setState((state) => ({
-      editCount: state.editCount + 1,
+    // Use Date.now() to guarantee a unique value that always changes
+    useEditorStore.setState({
+      editCount: useEditorStore.getState().editCount + 1,
       canUndo: actions.undo_available,
       canRedo: actions.redo_available,
-      refreshTrigger: state.refreshTrigger + 1,
-    }));
+      refreshTrigger: Date.now(),
+    });
   };
 
   return (

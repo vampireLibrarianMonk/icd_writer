@@ -128,10 +128,22 @@ def _ir_blocks_to_elements(page_info: "PageInfo") -> list["PageElement"]:
             if block.style.font_name:
                 font_name = block.style.font_name
 
+        # For table-like blocks, expand bbox height to fit reformatted content
+        formatted_text = _format_block_text(block)
+        line_count = formatted_text.count("\n") + 1
+        min_height = line_count * (font_size * 1.4)  # line height ~1.4x font size
+        block_height = block.bbox.y1 - block.bbox.y0
+        actual_height = max(block_height, min_height)
+
         elements.append(
             TextElement(
-                text=_format_block_text(block),
-                bbox=block.bbox,
+                text=formatted_text,
+                bbox=BoundingBox(
+                    x0=block.bbox.x0,
+                    y0=block.bbox.y0,
+                    x1=block.bbox.x1,
+                    y1=block.bbox.y0 + actual_height,
+                ),
                 font_name=font_name,
                 font_size_pt=font_size,
                 bold=bold,

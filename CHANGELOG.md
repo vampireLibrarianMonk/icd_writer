@@ -6,6 +6,38 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.2.0] — 2026-07-31
+
+### Added
+- 1:1 page patching engine: edits now redact and replace text directly on the source PDF
+  - Preserves all original formatting, fonts, colors, and positions
+  - Table cells center-aligned within column (matches original alignment)
+  - Paragraph text uses full block reflow with justified word-wrap
+- Paragraph reflow on edit: entire paragraph block retypeset with `insert_textbox` + justify
+- Alignment detection: auto-distinguishes table cells (center) from paragraph text (justify)
+- System font matching: Liberation Serif (Docker) / Times New Roman (Windows) for metric-identical rendering
+- Color preservation: inserted text uses the original span's color
+- Comprehensive test suite: 577 tests pass locally, 66 Docker-only tests
+- Docker test infrastructure: `@pytest.mark.docker_only` marker, auto-skip, runner script
+- Auto-indexing: all ICD PDFs indexed before test session via `pytest_sessionstart`
+
+### Changed
+- Page image endpoint uses PyMuPDF redaction+insertion instead of WeasyPrint full re-render
+- Export endpoint uses same 1:1 patching (unedited pages byte-identical to source)
+- Footer blocks no longer incorrectly moved during page split (pre-shift position check)
+- Fragment detection uses character-level diff with word-boundary expansion
+- Dockerfile includes test dependencies and full tests/ directory
+
+### Fixed
+- Table 4.3 edit (30W→25W): renders centered in column with correct font and color
+- Paragraph 4.1 edit: no longer overflows past line end (full paragraph reflow)
+- Paragraph 4.2 edit (TBR→value): no whitespace gap (full line rewrite with justify)
+- Footer reflow bug: footer blocks at y>page_height-50 stay in place during page split
+- OpenSearch availability check uses socket (no more test hangs on Windows)
+- All 19 pre-existing test failures fixed
+
+---
+
 ## [1.1.0] — 2026-07-29
 
 ### Added

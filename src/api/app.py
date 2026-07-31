@@ -817,28 +817,28 @@ def create_app() -> FastAPI:
                 page_edited = True
 
         if page_edited:
-            # Re-render from IR using WeasyPrint
+            # Patch the source page directly (1:1 rendering — only changed text differs)
             doc.close()
             try:
-                from weasyprint import HTML
-                from src.rendering.renderer import render_page_to_html
-                from src.rendering.ir_renderer import _ir_blocks_to_elements
+                from src.rendering.page_patch import get_page_edits_from_session, patch_page
 
-                page_info = doc_ir.pages[page_number - 1]
-                elements = _ir_blocks_to_elements(page_info)
-                html_content = render_page_to_html(page_info.width_pt, page_info.height_pt, elements)
-                pdf_bytes = HTML(string=html_content).write_pdf()
-
-                # Convert PDF page to PNG
-                rendered_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                pix = rendered_doc[0].get_pixmap(dpi=150)
-                img_bytes = pix.tobytes("png")
-                rendered_doc.close()
+                edits = get_page_edits_from_session(state["session"], doc_ir, page_number)
+                if edits:
+                    img_bytes = patch_page(source_path, page_number, edits)
+                else:
+                    # No actionable edits found — serve original
+                    doc = fitz.open(source_path)
+                    page = doc[page_number - 1]
+                    pix = page.get_pixmap(dpi=150)
+                    img_bytes = pix.tobytes("png")
+                    doc.close()
 
                 return Response(content=img_bytes, media_type="image/png",
                                headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
-            except Exception:
-                # Fallback to source on render failure
+            except Exception as e:
+                # Fallback to source on patch failure
+                import traceback
+                traceback.print_exc()
                 doc = fitz.open(source_path)
                 page = doc[page_number - 1]
                 pix = page.get_pixmap(dpi=150)
@@ -1621,29 +1621,100 @@ def create_app() -> FastAPI:
 
     @app.post("/document/export")
     def export_pdf():
-        """Export the current document state as a PDF (with edits applied)."""
+        """Export the current document state as a PDF (with edits applied).
+
+        Uses 1:1 page patching: copies the source PDF and applies text
+        redaction/insertion only for edited values. Unedited pages and
+        all non-edited content remains pixel-identical to the source.
+        """
         doc_ir = state["document_ir"]
         session = state["session"]
         if not doc_ir or not session:
             raise HTTPException(404, "No document loaded — open a document first")
 
         from src.output_dir import OutputDir
-        from src.rendering.ir_renderer import render_ir_to_pdf
+        from src.rendering.page_patch import get_page_edits_from_session
+
+        import fitz
 
         out = OutputDir(
             document_name=Path(session.document_path).stem if session else "export"
         )
+        output_path = out.reconstructed_pdf_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        result = render_ir_to_pdf(
-            doc_ir, session.document_path, out.reconstructed_pdf_path
-        )
+        source_path = session.document_path
+
+        # Determine which pages have edits
+        pages_with_edits: dict[int, list[dict]] = {}
+        for page_num in range(1, doc_ir.page_count + 1):
+            edits = get_page_edits_from_session(session, doc_ir, page_num)
+            if edits:
+                pages_with_edits[page_num] = edits
+
+        # Open source and apply patches
+        doc = fitz.open(str(source_path))
+        for page_num, edits in pages_with_edits.items():
+            if page_num > len(doc):
+                continue
+            page = doc[page_num - 1]
+            for edit in edits:
+                old_text = edit["old_text"]
+                new_text = edit["new_text"]
+                if old_text == new_text:
+                    continue
+
+                instances = page.search_for(old_text)
+                if not instances:
+                    continue
+
+                rect = instances[0]
+                from src.rendering.page_patch import _extract_font_info, _get_font_object, _get_pymupdf_fontname
+                font_name, font_size, baseline_y, bold, italic, color = _extract_font_info(page, rect, old_text)
+
+                page.add_redact_annot(rect, fill=(1, 1, 1))
+                page.apply_redactions()
+
+                # Determine alignment and insert
+                from src.rendering.page_patch import _detect_alignment
+                alignment = _detect_alignment(page, rect, old_text)
+                original_center_x = (rect.x0 + rect.x1) / 2
+
+                font_obj = _get_font_object(font_name, bold, italic)
+                if font_obj:
+                    new_width = font_obj.text_length(new_text, fontsize=font_size)
+                    if alignment == "center":
+                        insert_x = original_center_x - new_width / 2
+                    else:
+                        insert_x = rect.x0
+                    tw = fitz.TextWriter(page.rect)
+                    tw.append(fitz.Point(insert_x, baseline_y), new_text, font=font_obj, fontsize=font_size)
+                    tw.write_text(page, color=color)
+                else:
+                    builtin = _get_pymupdf_fontname(font_name, bold, italic)
+                    try:
+                        fallback_font = fitz.Font(fontname=builtin)
+                        new_width = fallback_font.text_length(new_text, fontsize=font_size)
+                        if alignment == "center":
+                            insert_x = original_center_x - new_width / 2
+                        else:
+                            insert_x = rect.x0
+                    except Exception:
+                        insert_x = rect.x0
+                    page.insert_text(
+                        fitz.Point(insert_x, baseline_y), new_text,
+                        fontname=builtin, fontsize=font_size, color=color,
+                    )
+
+        doc.save(str(output_path))
+        doc.close()
 
         if session:
             session.record(
-                ActionType.DOCUMENT_EXPORTED, data={"path": str(result)}
+                ActionType.DOCUMENT_EXPORTED, data={"path": str(output_path)}
             )
 
-        return {"status": "exported", "path": str(result)}
+        return {"status": "exported", "path": str(output_path)}
 
     # ─── Configuration ─────────────────────────────────────────────
 

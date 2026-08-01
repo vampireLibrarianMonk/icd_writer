@@ -424,3 +424,34 @@ class TestTOCEditing:
         )
         assert res.json()["status"] == "updated"
         assert res.json()["new_page_ref"] == "7"
+
+    def test_toc_edit_preserves_indentation(self, client):
+        """Edited TOC entry aligns at x=114 (same as other top-level titles)."""
+        client.put(
+            "/document/page/3/toc?index=21"
+            "&title=4.+Electrical+%26+Data+Interface&page_ref=4"
+        )
+
+        export_res = client.get("/document/export-download?filename=test.pdf")
+        doc = fitz.open(stream=export_res.content, filetype="pdf")
+        page = doc[2]
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+
+        # Find the inserted title and check its x-position
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    text = "".join(c["c"] for c in chars)
+                    if "Data Interface" in text:
+                        x = span["bbox"][0]
+                        # Must be at x=114 (same indent as other titles)
+                        assert abs(x - 114.0) < 2.0, (
+                            f"TOC title at x={x:.1f}, expected ~114.0"
+                        )
+                        doc.close()
+                        return
+        doc.close()
+        pytest.fail("Edited TOC title not found in export rawdict")

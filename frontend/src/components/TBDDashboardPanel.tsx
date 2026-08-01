@@ -46,15 +46,17 @@ export function TBDDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("");
-  const [filterDocument, setFilterDocument] = useState<string>("");
   const [availableDocuments, setAvailableDocuments] = useState<string[]>([]);
 
-  // Default the document filter to the currently opened document
+  // Initialize document filter from the currently opened document
   const { documentPath } = useEditorStore();
+  const getFilename = (path: string) => path.split("/").pop()?.split("\\").pop() || "";
+  const [filterDocument, setFilterDocument] = useState<string>(() => getFilename(documentPath));
+
+  // Update filter when document changes
   useEffect(() => {
     if (documentPath) {
-      const filename = documentPath.split("/").pop()?.split("\\").pop() || "";
-      if (filename) setFilterDocument(filename);
+      setFilterDocument(getFilename(documentPath));
     }
   }, [documentPath]);
 

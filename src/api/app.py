@@ -1681,8 +1681,6 @@ def create_app() -> FastAPI:
             # Then: source pages before the insertion come first, then new page(s),
             # then remaining source pages.
 
-            from src.api.session import ActionType
-
             # Find where new pages were inserted
             insert_after = source_page_count  # default: append at end
             for action in session.actions:

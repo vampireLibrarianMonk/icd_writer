@@ -402,8 +402,14 @@ def _patch_paragraph_line(
     wrapped_lines = _word_wrap(new_block_text.strip(), content_width, measure_font, font_size)
 
     # Insert each line at the correct y-position (matching original line spacing)
+    # Stop before the footer zone (bottom 72pt of page)
+    page_height = page.rect.height
+    content_bottom_y = page_height - 72  # Don't insert below this
+
     for i, line_text in enumerate(wrapped_lines):
         y = first_baseline_y + i * line_height
+        if y > content_bottom_y:
+            break  # Stop — remaining lines go on the overflow page
         page.insert_text(
             fitz.Point(block_rect.x0, y),
             line_text,

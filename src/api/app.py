@@ -975,24 +975,29 @@ def create_app() -> FastAPI:
             for i in range(num_new_pages):
                 ir_idx = insert_after + i
                 page_info = doc_ir.pages[ir_idx]
-                try:
-                    from weasyprint import HTML
-                    elements = _ir_blocks_to_elements(page_info)
-                    html = render_page_to_html(page_info.width_pt, page_info.height_pt, elements)
-                    pdf_bytes = HTML(string=html).write_pdf()
-                    rendered = fitz.open(stream=pdf_bytes, filetype="pdf")
-                    output_doc.insert_pdf(rendered)
-                    rendered.close()
-                except Exception:
-                    new_page = output_doc.new_page(width=page_info.width_pt, height=page_info.height_pt)
-                    y = 72.0
-                    for block in page_info.text_blocks:
-                        new_page.insert_text(
-                            fitz.Point(block.bbox.x0, y + 12),
-                            block.text_verbatim[:200],
-                            fontname="tiro", fontsize=10, color=(0, 0, 0),
-                        )
-                        y += max(14, block.bbox.height)
+                # Create overflow page — skip blocks whose content was already
+                # rendered on the edited page (they were partially placed there by the patch)
+                new_page = output_doc.new_page(
+                    width=page_info.width_pt, height=page_info.height_pt
+                )
+                y = 72.0
+                # Get the edit's new_text to identify which block to skip
+                edited_texts = set()
+                for pg_edits in pages_with_edits.values():
+                    for edit in pg_edits:
+                        edited_texts.add(" ".join(edit["new_text"].split())[:40])
+
+                for block in page_info.text_blocks:
+                    # Skip blocks that contain the edited text (already on previous page)
+                    block_start = " ".join(block.text_verbatim.split())[:40]
+                    if block_start in edited_texts:
+                        continue
+                    new_page.insert_text(
+                        fitz.Point(block.bbox.x0, y + 12),
+                        block.text_verbatim[:500],
+                        fontname="tiro", fontsize=12, color=(0, 0, 0),
+                    )
+                    y += max(14, block.bbox.height)
 
             if insert_after < source_page_count:
                 output_doc.insert_pdf(source_doc, from_page=insert_after, to_page=source_page_count - 1)

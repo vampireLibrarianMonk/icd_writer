@@ -1633,7 +1633,7 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "No document loaded — open a document first")
 
         from src.output_dir import OutputDir
-        from src.rendering.page_patch import get_page_edits_from_session
+        from src.rendering.page_patch import get_page_edits_from_session, _apply_edit_to_page
 
         import fitz
 
@@ -1652,47 +1652,86 @@ def create_app() -> FastAPI:
             if edits:
                 pages_with_edits[page_num] = edits
 
-        # Open source and apply patches using the same logic as page image rendering
-        from src.rendering.page_patch import _apply_edit_to_page
-        doc = fitz.open(str(source_path))
-        source_page_count = len(doc)
+        # Build the output PDF with pages in correct order.
+        # The IR may have more pages than the source (from page splits).
+        # Pages that exist in source get patched; new pages get rendered from IR.
+        from src.rendering.ir_renderer import _ir_blocks_to_elements
+        from src.rendering.renderer import render_page_to_html
 
+        source_doc = fitz.open(str(source_path))
+        source_page_count = len(source_doc)
+
+        # First, apply edits to the source document
         for page_num, edits in pages_with_edits.items():
             if page_num > source_page_count:
                 continue
-            page = doc[page_num - 1]
+            page = source_doc[page_num - 1]
             for edit in edits:
                 _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
 
-        # Add new pages created by page splits (exist in IR but not in source)
-        if doc_ir.page_count > source_page_count:
-            from src.rendering.ir_renderer import _ir_blocks_to_elements
-            from src.rendering.renderer import render_page_to_html
+        if doc_ir.page_count <= source_page_count:
+            # No new pages — just save the patched source
+            source_doc.save(str(output_path))
+            source_doc.close()
+        else:
+            # New pages were created by page splits.
+            # The split inserts new pages in the middle, pushing later pages down.
+            # Strategy: find the insertion point by checking which IR page was
+            # reported as "new_page_number" in the session's reflow actions.
+            # Then: source pages before the insertion come first, then new page(s),
+            # then remaining source pages.
 
-            for page_idx in range(source_page_count, doc_ir.page_count):
-                page_info = doc_ir.pages[page_idx]
+            from src.api.session import ActionType
+
+            # Find where new pages were inserted
+            insert_after = source_page_count  # default: append at end
+            for action in session.actions:
+                if action.action_type == ActionType.BLOCK_EDITED:
+                    # The edit was on this page — the new page goes after it
+                    if action.page:
+                        insert_after = action.page
+                        break
+
+            num_new_pages = doc_ir.page_count - source_page_count
+
+            output_doc = fitz.open()
+
+            # Pages before the insertion point (from source, already patched)
+            if insert_after > 0:
+                output_doc.insert_pdf(source_doc, from_page=0, to_page=insert_after - 1)
+
+            # New pages (rendered from IR)
+            for i in range(num_new_pages):
+                ir_idx = insert_after + i  # 0-based index in IR for new pages
+                page_info = doc_ir.pages[ir_idx]
                 try:
                     from weasyprint import HTML
                     elements = _ir_blocks_to_elements(page_info)
                     html = render_page_to_html(page_info.width_pt, page_info.height_pt, elements)
                     pdf_bytes = HTML(string=html).write_pdf()
-                    new_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                    doc.insert_pdf(new_doc)
-                    new_doc.close()
+                    rendered = fitz.open(stream=pdf_bytes, filetype="pdf")
+                    output_doc.insert_pdf(rendered)
+                    rendered.close()
                 except Exception:
-                    # If WeasyPrint unavailable, create a blank page with text
-                    new_page = doc.new_page(width=page_info.width_pt, height=page_info.height_pt)
+                    new_page = output_doc.new_page(
+                        width=page_info.width_pt, height=page_info.height_pt
+                    )
                     y = 72.0
                     for block in page_info.text_blocks:
                         new_page.insert_text(
                             fitz.Point(block.bbox.x0, y + 12),
-                            block.text_verbatim,
+                            block.text_verbatim[:200],
                             fontname="tiro", fontsize=10, color=(0, 0, 0),
                         )
-                        y += 14
+                        y += max(14, block.bbox.height)
 
-        doc.save(str(output_path))
-        doc.close()
+            # Remaining source pages (after the insertion point)
+            if insert_after < source_page_count:
+                output_doc.insert_pdf(source_doc, from_page=insert_after, to_page=source_page_count - 1)
+
+            output_doc.save(str(output_path))
+            output_doc.close()
+            source_doc.close()
 
         if session:
             session.record(

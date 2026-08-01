@@ -347,7 +347,10 @@ def _patch_paragraph_line(
                 line_text += "".join(c["c"] for c in chars)
             lines_text.append(line_text.rstrip())
         block_text = " ".join(lines_text)
-        if old_text in block_text:
+        # Normalize: replace newlines with spaces for matching (IR stores \n, block joins with space)
+        old_text_normalized = " ".join(old_text.split())
+        block_text_normalized = " ".join(block_text.split())
+        if old_text_normalized in block_text_normalized:
             target_block = block
             target_block_text = block_text
             break
@@ -368,7 +371,11 @@ def _patch_paragraph_line(
     block_rect = fitz.Rect(block_bbox)
 
     # Apply the text replacement to the full block text
-    new_block_text = target_block_text.replace(old_text, new_text, 1)
+    # Use normalized text (spaces instead of newlines) for the replacement
+    block_text_spaces = " ".join(target_block_text.split())
+    old_text_spaces = " ".join(old_text.split())
+    new_text_spaces = " ".join(new_text.split())
+    new_block_text = block_text_spaces.replace(old_text_spaces, new_text_spaces, 1)
 
     # Compute line height from original
     num_lines = len(target_block["lines"])

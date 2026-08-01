@@ -639,8 +639,17 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
         #
         # For TOC entries: the search rect may only cover the title text, but
         # the full line includes leader dots and page number. Find the containing
-        # span in rawdict to get the full visual extent of the line.
+        # span in rawdict to get the full visual extent of the line, the correct
+        # font, and the correct insertion point.
         redact_rect = rect
+        insert_x = rect.x0
+        span_font = font_name
+        span_size = font_size
+        span_bold = bold
+        span_italic = italic
+        span_baseline = baseline_y
+        span_color = color
+
         raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
         for block in raw.get("blocks", []):
             if block.get("type") != 0:
@@ -649,25 +658,74 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
                 for span in line.get("spans", []):
                     chars = span.get("chars", [])
                     span_text = "".join(c["c"] for c in chars)
-                    # If this span contains our old text and has dots (TOC line)
-                    if old_text.split()[-1] in span_text and "..." in span_text:
-                        # Use the full span bbox as redact rect
+                    # Find the span that contains the core of our search text
+                    # (last word of old_text to avoid matching the section number)
+                    search_word = old_text.split()[-1]  # e.g., "Interface"
+                    if search_word in span_text and "..." in span_text:
+                        # This is the TOC entry span — use its full extent
                         redact_rect = fitz.Rect(span["bbox"])
+                        insert_x = span["bbox"][0]
+                        span_font = span.get("font", font_name)
+                        span_size = span.get("size", font_size)
+                        flags = span.get("flags", 0)
+                        span_bold = bool(flags & (1 << 4)) or "bold" in span_font.lower()
+                        span_italic = bool(flags & (1 << 1)) or "italic" in span_font.lower()
+                        origin = span.get("origin")
+                        if origin:
+                            span_baseline = origin[1]
+                        # Extract color
+                        color_int = span.get("color", 0)
+                        cr = ((color_int >> 16) & 0xFF) / 255.0
+                        cg = ((color_int >> 8) & 0xFF) / 255.0
+                        cb = (color_int & 0xFF) / 255.0
+                        span_color = (cr, cg, cb)
                         break
+
+        # Also redact the section number span ("4.") if it's separate
+        # so we can rewrite the full entry cleanly
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    span_text = "".join(c["c"] for c in chars).strip()
+                    bbox = span["bbox"]
+                    # Section number: same y-line, to the left of our span, short text like "4."
+                    if (abs(bbox[1] - redact_rect.y0) < 2
+                            and bbox[0] < redact_rect.x0
+                            and len(span_text) <= 5
+                            and span_text.endswith(".")):
+                        # Check if this section number is part of our old_text
+                        if old_text.startswith(span_text) or old_text.startswith(span_text.rstrip(".")):
+                            # Expand redact rect to include the section number
+                            num_rect = fitz.Rect(bbox)
+                            redact_rect = redact_rect | num_rect
+                            insert_x = bbox[0]  # Start insertion from section number position
+                            break
 
         page.add_redact_annot(redact_rect, fill=(1, 1, 1))
         page.apply_redactions()
 
-        font_obj = _get_font_object(font_name, bold, italic)
+        # Insert new text with the SAME font/size/color as the original span
+        font_obj = _get_font_object(span_font, span_bold, span_italic)
         if font_obj:
             tw = fitz.TextWriter(page.rect)
-            tw.append(fitz.Point(rect.x0, baseline_y), new_text, font=font_obj, fontsize=font_size)
-            tw.write_text(page, color=color)
+            tw.append(
+                fitz.Point(insert_x, span_baseline),
+                new_text,
+                font=font_obj,
+                fontsize=span_size,
+            )
+            tw.write_text(page, color=span_color)
         else:
-            builtin = _get_pymupdf_fontname(font_name, bold, italic)
+            builtin = _get_pymupdf_fontname(span_font, span_bold, span_italic)
             page.insert_text(
-                fitz.Point(rect.x0, baseline_y), new_text,
-                fontname=builtin, fontsize=font_size, color=color,
+                fitz.Point(insert_x, span_baseline),
+                new_text,
+                fontname=builtin,
+                fontsize=span_size,
+                color=span_color,
             )
         return []
     else:

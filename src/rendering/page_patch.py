@@ -626,9 +626,19 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str, inline: b
         )
         page.add_redact_annot(redact_rect, fill=(1, 1, 1))
         page.apply_redactions()
+
+        # Center the new text at the same position as the original text's center
         builtin = _get_pymupdf_fontname(font_name, bold, italic)
+        original_center_x = (rect.x0 + rect.x1) / 2
+        try:
+            fb = fitz.Font(fontname=builtin)
+            new_width = fb.text_length(new_text, fontsize=font_size)
+            insert_x = original_center_x - new_width / 2
+        except Exception:
+            insert_x = rect.x0
+
         page.insert_text(
-            fitz.Point(rect.x0, baseline_y), new_text,
+            fitz.Point(insert_x, baseline_y), new_text,
             fontname=builtin, fontsize=font_size, color=color,
         )
         return []

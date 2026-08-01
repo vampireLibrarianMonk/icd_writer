@@ -817,16 +817,16 @@ def create_app() -> FastAPI:
                 page_edited = True
 
         if page_edited:
-            # Patch the source page directly (1:1 rendering — only changed text differs)
+            # Rebuild the page from rawdict with edits applied
             doc.close()
             try:
-                from src.rendering.page_patch import get_page_edits_from_session, patch_page
+                from src.rendering.page_patch import get_page_edits_from_session
+                from src.rendering.page_rebuild import rebuild_page_with_edits
 
                 edits = get_page_edits_from_session(state["session"], doc_ir, page_number)
                 if edits:
-                    img_bytes = patch_page(source_path, page_number, edits)
+                    img_bytes = rebuild_page_with_edits(source_path, page_number, edits)
                 else:
-                    # No actionable edits found — serve original
                     doc = fitz.open(source_path)
                     page = doc[page_number - 1]
                     pix = page.get_pixmap(dpi=150)
@@ -898,9 +898,8 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "No document loaded")
 
         from src.output_dir import OutputDir
-        from src.rendering.page_patch import get_page_edits_from_session, _apply_edit_to_page
-        from src.rendering.ir_renderer import _ir_blocks_to_elements
-        from src.rendering.renderer import render_page_to_html
+        from src.rendering.page_patch import get_page_edits_from_session
+        from src.rendering.page_rebuild import rebuild_page_to_doc
         import fitz
 
         out = OutputDir(document_name=Path(session.document_path).stem)
@@ -916,109 +915,41 @@ def create_app() -> FastAPI:
             if edits:
                 pages_with_edits[page_num] = edits
 
-        # Build the output PDF
+        # Build output PDF: for each page, either copy from source or rebuild
         source_doc = fitz.open(str(source_path))
         source_page_count = len(source_doc)
+        output_doc = fitz.open()
+        all_overflow_lines: list[str] = []
 
-        # Apply edits to source pages and collect overflow lines
-        overflow_lines_all: list[str] = []
-        for page_num, edits in pages_with_edits.items():
-            if page_num > source_page_count:
-                continue
-            page = source_doc[page_num - 1]
-            for edit in edits:
-                overflow = _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
+        for page_idx in range(source_page_count):
+            page_num = page_idx + 1
+            if page_num in pages_with_edits:
+                # Rebuild this page with edits applied
+                rebuilt, overflow = rebuild_page_to_doc(source_doc, page_num, pages_with_edits[page_num])
+                output_doc.insert_pdf(rebuilt)
+                rebuilt.close()
                 if overflow:
-                    overflow_lines_all.extend(overflow)
+                    all_overflow_lines.extend(overflow)
+            else:
+                # Copy unchanged page from source
+                output_doc.insert_pdf(source_doc, from_page=page_idx, to_page=page_idx)
 
-        # If overflow occurred, redact moved content from the source page
-        # (blocks that the IR moved to the overflow page still exist on the source)
-        if doc_ir.page_count > source_page_count:
-            for action in session.actions:
-                if action.action_type == ActionType.BLOCK_EDITED and action.page:
-                    edited_page_num = action.page
-                    if edited_page_num > source_page_count:
-                        continue
-                    # Find what blocks are on the overflow page (IR page edited_page+1)
-                    overflow_ir_idx = edited_page_num  # 0-based index of overflow page in IR
-                    if overflow_ir_idx < len(doc_ir.pages):
-                        overflow_page_info = doc_ir.pages[overflow_ir_idx]
-                        # Search for these blocks' text on the source page and redact them
-                        source_page = source_doc[edited_page_num - 1]
-                        for block in overflow_page_info.text_blocks:
-                            # Search for this block's text on the source page
-                            search_text = block.text_verbatim[:50].split("\n")[0].strip()
-                            if len(search_text) < 5:
-                                continue
-                            instances = source_page.search_for(search_text)
-                            if instances:
-                                # Redact this text (it moved to the overflow page)
-                                source_page.add_redact_annot(instances[0], fill=(1, 1, 1))
-                        source_page.apply_redactions()
-                    break
-
-        if doc_ir.page_count <= source_page_count:
-            source_doc.save(str(output_path))
-            source_doc.close()
-        else:
-            # Insert overflow pages
-            insert_after = source_page_count
-            for action in session.actions:
-                if action.action_type == ActionType.BLOCK_EDITED:
-                    if action.page:
-                        insert_after = action.page
-                        break
-
-            num_new_pages = doc_ir.page_count - source_page_count
-            output_doc = fitz.open()
-
-            if insert_after > 0:
-                output_doc.insert_pdf(source_doc, from_page=0, to_page=insert_after - 1)
-
-            for i in range(num_new_pages):
-                ir_idx = insert_after + i
-                page_info = doc_ir.pages[ir_idx]
-                new_page = output_doc.new_page(
-                    width=page_info.width_pt, height=page_info.height_pt
+        # If there are overflow lines, add a continuation page
+        if all_overflow_lines:
+            page_info = doc_ir.pages[0]  # Use first page dimensions
+            new_page = output_doc.new_page(width=page_info.width_pt, height=page_info.height_pt)
+            y = 72.0
+            for line_text in all_overflow_lines:
+                new_page.insert_text(
+                    fitz.Point(90, y + 12),
+                    line_text,
+                    fontname="tiro", fontsize=12, color=(0, 0, 0),
                 )
-                y = 72.0
+                y += 14
 
-                # First, render the overflow lines from page 7 (continuation text)
-                if overflow_lines_all:
-                    builtin = "tiro"
-                    for line_text in overflow_lines_all:
-                        new_page.insert_text(
-                            fitz.Point(90, y + 12),
-                            line_text,
-                            fontname=builtin, fontsize=12, color=(0, 0, 0),
-                        )
-                        y += 14
-                    overflow_lines_all = []  # Only render once
-                    y += 14  # Gap after overflow text
-
-                # Then render non-edited blocks from the IR overflow page
-                edited_texts = set()
-                for pg_edits in pages_with_edits.values():
-                    for edit in pg_edits:
-                        edited_texts.add(" ".join(edit["new_text"].split())[:40])
-
-                for block in page_info.text_blocks:
-                    block_start = " ".join(block.text_verbatim.split())[:40]
-                    if block_start in edited_texts:
-                        continue
-                    new_page.insert_text(
-                        fitz.Point(block.bbox.x0, y + 12),
-                        block.text_verbatim[:500],
-                        fontname="tiro", fontsize=12, color=(0, 0, 0),
-                    )
-                    y += max(14, block.bbox.height)
-
-            if insert_after < source_page_count:
-                output_doc.insert_pdf(source_doc, from_page=insert_after, to_page=source_page_count - 1)
-
-            output_doc.save(str(output_path))
-            output_doc.close()
-            source_doc.close()
+        output_doc.save(str(output_path))
+        output_doc.close()
+        source_doc.close()
 
         return FileResponse(
             str(output_path),

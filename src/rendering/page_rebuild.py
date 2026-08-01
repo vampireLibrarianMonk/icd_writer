@@ -632,26 +632,25 @@ def _get_cached_font(
     bold: bool,
     italic: bool,
 ) -> fitz.Font:
-    """Get or create a fitz.Font object, using system fonts when available.
+    """Get or create a fitz.Font object using PDF base-14 built-in fonts.
 
-    Falls back to PyMuPDF built-in fonts if no system font is found.
+    Uses base-14 fonts (Times, Helvetica, Courier) which are universally
+    available in all PDF viewers without embedding. Metrics are close to
+    the document's original fonts.
     """
     key = (font_name.lower(), bold, italic)
     if key in cache:
         return cache[key]
 
-    # Try system font first (metric-compatible Liberation family)
-    font_obj = _get_font_object(font_name, bold, italic)
-    if font_obj:
-        cache[key] = font_obj
-        return font_obj
-
-    # Fallback to built-in font
+    # Always use base-14 built-in fonts for universal viewer compatibility
     builtin_name = _get_pymupdf_fontname(font_name, bold, italic)
     try:
         font_obj = fitz.Font(fontname=builtin_name)
     except Exception:
         font_obj = fitz.Font(fontname="tiro")
+
+    cache[key] = font_obj
+    return font_obj
 
     cache[key] = font_obj
     return font_obj

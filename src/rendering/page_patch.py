@@ -610,26 +610,20 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
         page.add_redact_annot(redact_rect, fill=(1, 1, 1))
         page.apply_redactions()
 
+        # Center the new text at the original column center using base-14 fonts
+        # (universally available in all PDF viewers without embedding).
         original_center_x = (rect.x0 + rect.x1) / 2
-        font_obj = _get_font_object(font_name, bold, italic)
-        if font_obj:
-            new_width = font_obj.text_length(new_text, fontsize=font_size)
+        builtin = _get_pymupdf_fontname(font_name, bold, italic)
+        try:
+            fb = fitz.Font(fontname=builtin)
+            new_width = fb.text_length(new_text, fontsize=font_size)
             insert_x = original_center_x - new_width / 2
-            tw = fitz.TextWriter(page.rect)
-            tw.append(fitz.Point(insert_x, baseline_y), new_text, font=font_obj, fontsize=font_size)
-            tw.write_text(page, color=color)
-        else:
-            builtin = _get_pymupdf_fontname(font_name, bold, italic)
-            try:
-                fb = fitz.Font(fontname=builtin)
-                new_width = fb.text_length(new_text, fontsize=font_size)
-                insert_x = original_center_x - new_width / 2
-            except Exception:
-                insert_x = rect.x0
-            page.insert_text(
-                fitz.Point(insert_x, baseline_y), new_text,
-                fontname=builtin, fontsize=font_size, color=color,
-            )
+        except Exception:
+            insert_x = rect.x0
+        page.insert_text(
+            fitz.Point(insert_x, baseline_y), new_text,
+            fontname=builtin, fontsize=font_size, color=color,
+        )
         return []
     elif len(old_text) < 120 and "\n" not in old_text:
         # SHORT INLINE REPLACEMENT — for TOC entries, short titles, labels.

@@ -579,7 +579,21 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
         logger.warning(f"_apply_edit_to_page: '{old_text[:30]}...' not found")
         return []
 
-    rect = instances[0]
+    # search_for can return multiple rects for one match (when the text spans
+    # across separate PDF spans/lines). Union them into a single covering rect.
+    if len(instances) == 1:
+        rect = instances[0]
+    else:
+        # Multiple rects: likely one match split across spans (e.g., "4." + "Electrical Interface")
+        # Union all rects that are on the same line (similar y)
+        first_y = instances[0].y0
+        same_line = [r for r in instances if abs(r.y0 - first_y) < 5]
+        if same_line:
+            rect = same_line[0]
+            for r in same_line[1:]:
+                rect = rect | r  # union
+        else:
+            rect = instances[0]
     font_name, font_size, baseline_y, bold, italic, color = _extract_font_info(page, rect, old_text)
     alignment = _detect_alignment(page, rect, old_text)
 
@@ -622,7 +636,26 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
         # Just redact the found rect and insert new text at the same position.
         # Do NOT trigger paragraph reflow (which would destroy surrounding content
         # by redacting the entire containing block).
-        page.add_redact_annot(rect, fill=(1, 1, 1))
+        #
+        # For TOC entries: the search rect may only cover the title text, but
+        # the full line includes leader dots and page number. Find the containing
+        # span in rawdict to get the full visual extent of the line.
+        redact_rect = rect
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    span_text = "".join(c["c"] for c in chars)
+                    # If this span contains our old text and has dots (TOC line)
+                    if old_text.split()[-1] in span_text and "..." in span_text:
+                        # Use the full span bbox as redact rect
+                        redact_rect = fitz.Rect(span["bbox"])
+                        break
+
+        page.add_redact_annot(redact_rect, fill=(1, 1, 1))
         page.apply_redactions()
 
         font_obj = _get_font_object(font_name, bold, italic)

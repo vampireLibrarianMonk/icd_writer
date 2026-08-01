@@ -211,7 +211,7 @@ Edit text blocks directly in the PDF. If edits expand content past the page boun
 When an edit makes a block too large for the remaining page space, overflowing content moves to a new page.
 
 1. Navigate to **page 7** (Section 3.2.1 — Spectrometer Heaters)
-2. Click the paragraph starting with: *"the Cryostat. Cooler operation is controlled by the IDPU..."*
+2. Click the heading/paragraph starting with: *"4. Electrical Interface — The IDPU will be the single-point electrical interface..."* (near the bottom of the page)
 3. Replace the text with a much longer passage — paste this:
 
    > The Spectrometer consists of a Cryostat that houses nine segmented high-purity Germanium detectors that provide primary science data across the energy range of 3 keV to 17 MeV. These detectors are actively cooled to liquid nitrogen temperatures (approximately 77K) by the helium-based Stirling cycle mechanical cryocooler. The cooler is electrically driven by the Cooler Power Controller (CPC), which in turn is commanded and monitored by the Instrument Data Processing Unit (IDPU). The Spectrometer assembly also includes the attenuator shutter mechanism for managing photon rates during solar flares, the Charge Sensitive Amplifiers (CSA) for signal conditioning, and the High Voltage Filters for detector biasing, all mounted externally on the Cryostat structure.

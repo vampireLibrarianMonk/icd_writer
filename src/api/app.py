@@ -885,21 +885,98 @@ def create_app() -> FastAPI:
 
     @app.get("/document/export-download")
     def export_and_download(filename: str = "exported.pdf"):
-        """Export the document and immediately return it as a download."""
-        from fastapi.responses import FileResponse
-        from src.output_dir import OutputDir
-        from src.rendering.ir_renderer import render_ir_to_pdf
+        """Export the document and immediately return it as a download.
 
+        Uses the same 1:1 page patching as POST /document/export.
+        """
+        from fastapi.responses import FileResponse
+
+        # Trigger the export (reuses the POST /document/export logic)
         doc_ir = state["document_ir"]
         session = state["session"]
         if not doc_ir or not session:
             raise HTTPException(404, "No document loaded")
 
+        from src.output_dir import OutputDir
+        from src.rendering.page_patch import get_page_edits_from_session, _apply_edit_to_page
+        from src.rendering.ir_renderer import _ir_blocks_to_elements
+        from src.rendering.renderer import render_page_to_html
+        import fitz
+
         out = OutputDir(document_name=Path(session.document_path).stem)
-        render_ir_to_pdf(doc_ir, session.document_path, out.reconstructed_pdf_path)
+        output_path = out.reconstructed_pdf_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        source_path = session.document_path
+
+        # Determine which pages have edits
+        pages_with_edits: dict[int, list[dict]] = {}
+        for page_num in range(1, doc_ir.page_count + 1):
+            edits = get_page_edits_from_session(session, doc_ir, page_num)
+            if edits:
+                pages_with_edits[page_num] = edits
+
+        # Build the output PDF
+        source_doc = fitz.open(str(source_path))
+        source_page_count = len(source_doc)
+
+        # Apply edits to source pages
+        for page_num, edits in pages_with_edits.items():
+            if page_num > source_page_count:
+                continue
+            page = source_doc[page_num - 1]
+            for edit in edits:
+                _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
+
+        if doc_ir.page_count <= source_page_count:
+            source_doc.save(str(output_path))
+            source_doc.close()
+        else:
+            # Insert overflow pages
+            insert_after = source_page_count
+            for action in session.actions:
+                if action.action_type == ActionType.BLOCK_EDITED:
+                    if action.page:
+                        insert_after = action.page
+                        break
+
+            num_new_pages = doc_ir.page_count - source_page_count
+            output_doc = fitz.open()
+
+            if insert_after > 0:
+                output_doc.insert_pdf(source_doc, from_page=0, to_page=insert_after - 1)
+
+            for i in range(num_new_pages):
+                ir_idx = insert_after + i
+                page_info = doc_ir.pages[ir_idx]
+                try:
+                    from weasyprint import HTML
+                    elements = _ir_blocks_to_elements(page_info)
+                    html = render_page_to_html(page_info.width_pt, page_info.height_pt, elements)
+                    pdf_bytes = HTML(string=html).write_pdf()
+                    rendered = fitz.open(stream=pdf_bytes, filetype="pdf")
+                    output_doc.insert_pdf(rendered)
+                    rendered.close()
+                except Exception:
+                    new_page = output_doc.new_page(width=page_info.width_pt, height=page_info.height_pt)
+                    y = 72.0
+                    for block in page_info.text_blocks:
+                        new_page.insert_text(
+                            fitz.Point(block.bbox.x0, y + 12),
+                            block.text_verbatim[:200],
+                            fontname="tiro", fontsize=10, color=(0, 0, 0),
+                        )
+                        y += max(14, block.bbox.height)
+
+            if insert_after < source_page_count:
+                output_doc.insert_pdf(source_doc, from_page=insert_after, to_page=source_page_count - 1)
+
+            output_doc.save(str(output_path))
+            output_doc.close()
+            source_doc.close()
 
         return FileResponse(
-            str(out.reconstructed_pdf_path),
+            str(output_path),
             media_type="application/octet-stream",
             filename=filename,
             headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},

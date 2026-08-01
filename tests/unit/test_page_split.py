@@ -178,19 +178,19 @@ class TestSplitPageOnOverflow:
         assert "header" in page1_types
         assert len(doc.pages[0].text_blocks) == 2  # header + b1
 
-    def test_heading_blocks_not_moved(self):
-        """Heading blocks are not moved in Phase 1 (only paragraphs)."""
+    def test_heading_blocks_moved_on_overflow(self):
+        """Heading blocks ARE moved when they overflow."""
         blocks = [
             _make_block("b1", 72, 200, "Body paragraph"),
-            _make_block("h1", 725, 750, "3.5 Section Title", block_type="heading"),
+            _make_block("h1", 725, 740, "3.5 Section Title", block_type="heading"),
         ]
         page = _make_page(1, blocks)
         doc = _make_doc_ir([page])
 
         result = split_page_on_overflow(doc, 1)
 
-        # Heading stays (not a paragraph) — no split needed
-        assert result.split_occurred is False
+        assert result.split_occurred is True
+        assert result.blocks_moved == 1
 
     def test_new_page_has_correct_dimensions(self):
         """The new page inherits width and height from the source page."""
@@ -417,17 +417,18 @@ class TestListItemOverflow:
         assert result.blocks_moved == 1
         assert doc.pages[1].text_blocks[0].block_type == "caption"
 
-    def test_heading_still_not_moved(self):
-        """Headings are still NOT moved in Phase 2."""
+    def test_heading_moves_on_overflow(self):
+        """Headings ARE moved when they overflow."""
         blocks = [
             _make_block("b1", 72, 200, "Body"),
-            _make_block("h1", 725, 750, "4.0 Next Section", block_type="heading"),
+            _make_block("h1", 725, 740, "4.0 Next Section", block_type="heading"),
         ]
         page = _make_page(1, blocks)
         doc = _make_doc_ir([page])
 
         result = split_page_on_overflow(doc, 1)
-        assert result.split_occurred is False
+        assert result.split_occurred is True
+        assert result.blocks_moved == 1
 
     def test_mixed_types_overflow(self):
         """Mix of paragraphs and list items all move correctly."""

@@ -229,8 +229,8 @@ When an edit makes a block too large for the remaining page space, overflowing c
 | Paragraphs | Moved if they overflow the bottom margin |
 | List items | Moved (stay grouped with nearby items) |
 | Captions | Moved (travel with their associated content) |
+| Headings | Moved if they overflow (keeps structure with following content) |
 | Tables | Moved if they extend past the boundary |
-| Headings | Stay on the original page (anchor the structure) |
 | Headers/Footers | Never moved (fixed position) |
 
 ---

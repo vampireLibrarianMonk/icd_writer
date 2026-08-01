@@ -333,7 +333,7 @@ def split_page_on_overflow(
     content_bottom = page_height - page_bottom_margin
 
     # Block types eligible for page-split movement
-    MOVABLE_BLOCK_TYPES = {"paragraph", "list_item", "caption"}
+    MOVABLE_BLOCK_TYPES = {"paragraph", "list_item", "caption", "heading"}
 
     # Find overflowing blocks (not headers/footers, only movable types)
     blocks_to_move: list[TextBlock] = []

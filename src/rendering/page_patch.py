@@ -847,10 +847,9 @@ def get_page_edits_from_session(session, document_ir: DocumentIR, page_number: i
             })
             continue
 
-        # Short edits (< 200 chars) are already targeted — use directly
-        # without fragmentation. This handles inline replacements
-        # where the old_text IS the searchable text on the page.
-        if len(old_full) < 200:
+        # Short SINGLE-LINE edits (< 200 chars, no newlines) are already targeted —
+        # use directly without fragmentation.
+        if len(old_full) < 200 and "\n" not in old_full:
             result.append({
                 "old_text": old_full,
                 "new_text": new_full,

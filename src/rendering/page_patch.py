@@ -457,36 +457,35 @@ def _patch_paragraph_line(
     num_lines = len(target_block["lines"])
     line_height = block_rect.height / num_lines if num_lines > 0 else font_size * 1.2
 
+    # Get the first line's baseline for correct vertical positioning
+    first_origin = target_block["lines"][0]["spans"][0].get("origin", (0, 0))
+    first_baseline_y = first_origin[1] if first_origin else block_rect.y0 + font_size
+
     # Redact the entire paragraph block
     page.add_redact_annot(block_rect, fill=(1, 1, 1))
     page.apply_redactions()
 
-    # Allow one extra line of height for slightly longer text
-    insert_rect = fitz.Rect(block_rect)
-    insert_rect.y1 += line_height
-
-    # Re-typeset with justification
+    # Manually word-wrap and insert line-by-line with correct line spacing
     builtin = _get_pymupdf_fontname(font_name, bold, italic)
-    rc = page.insert_textbox(
-        insert_rect,
-        new_block_text.strip(),
-        fontname=builtin,
-        fontsize=font_size,
-        color=color,
-        align=fitz.TEXT_ALIGN_JUSTIFY,
-    )
+    content_width = block_rect.width
 
-    if rc < 0:
-        # Still overflows — try with more height
-        logger.warning(f"Paragraph reflow overflow ({rc:.1f}pt), expanding")
-        insert_rect.y1 += line_height
-        page.insert_textbox(
-            insert_rect,
-            new_block_text.strip(),
+    try:
+        measure_font = fitz.Font(fontname=builtin)
+    except Exception:
+        measure_font = None
+
+    # Word-wrap the new text to fit within content_width
+    wrapped_lines = _word_wrap(new_block_text.strip(), content_width, measure_font, font_size)
+
+    # Insert each line at the correct y-position (matching original line spacing)
+    for i, line_text in enumerate(wrapped_lines):
+        y = first_baseline_y + i * line_height
+        page.insert_text(
+            fitz.Point(block_rect.x0, y),
+            line_text,
             fontname=builtin,
             fontsize=font_size,
             color=color,
-            align=fitz.TEXT_ALIGN_LEFT,
         )
 
 
@@ -722,3 +721,39 @@ def _find_changed_fragments(old_text: str, new_text: str) -> list[tuple[str, str
         return [(old_fragment, new_fragment)]
 
     return []
+
+
+def _word_wrap(text: str, max_width: float, font: "fitz.Font | None", font_size: float) -> list[str]:
+    """Word-wrap text to fit within max_width.
+
+    Uses font metrics for precise measurement when available,
+    falls back to character-count estimate otherwise.
+
+    Returns a list of lines (strings) that each fit within max_width.
+    """
+    words = text.split()
+    if not words:
+        return [""]
+
+    lines = []
+    current_line = ""
+
+    for word in words:
+        test_line = f"{current_line} {word}".strip() if current_line else word
+
+        if font:
+            test_width = font.text_length(test_line, fontsize=font_size)
+        else:
+            test_width = len(test_line) * font_size * 0.5
+
+        if test_width <= max_width:
+            current_line = test_line
+        else:
+            if current_line:
+                lines.append(current_line)
+            current_line = word
+
+    if current_line:
+        lines.append(current_line)
+
+    return lines

@@ -681,39 +681,21 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
                         span_color = (cr, cg, cb)
                         break
 
-        # Also redact the section number span ("4.") if it's separate
-        # so we can rewrite the full entry cleanly
-        for block in raw.get("blocks", []):
-            if block.get("type") != 0:
-                continue
-            for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    chars = span.get("chars", [])
-                    span_text = "".join(c["c"] for c in chars).strip()
-                    bbox = span["bbox"]
-                    # Section number: same y-line, to the left of our span, short text like "4."
-                    if (abs(bbox[1] - redact_rect.y0) < 2
-                            and bbox[0] < redact_rect.x0
-                            and len(span_text) <= 5
-                            and span_text.endswith(".")):
-                        # Check if this section number is part of our old_text
-                        if old_text.startswith(span_text) or old_text.startswith(span_text.rstrip(".")):
-                            # Expand redact rect to include the section number
-                            num_rect = fitz.Rect(bbox)
-                            redact_rect = redact_rect | num_rect
-                            insert_x = bbox[0]  # Start insertion from section number position
-                            break
+        # DON'T redact the section number span ("4.") — leave it in place.
+        # Only the title+dots span gets redacted and replaced.
+        # Strip the section number prefix from new_text so we only insert the title.
+        import re as _re
+        new_title_only = _re.sub(r"^\d+[\.\d]*\.?\s*", "", new_text).strip()
 
         page.add_redact_annot(redact_rect, fill=(1, 1, 1))
         page.apply_redactions()
 
-        # Insert new text using a PDF base-14 built-in font (universally available
-        # in all PDF viewers without embedding). This avoids the "font not found"
-        # issue that occurs when referencing system fonts like Liberation Serif.
+        # Insert the title text (without section number) at the title x-position.
+        # This preserves the original indentation alignment with other entries.
         builtin = _get_pymupdf_fontname(span_font, span_bold, span_italic)
         page.insert_text(
             fitz.Point(insert_x, span_baseline),
-            new_text,
+            new_title_only,
             fontname=builtin,
             fontsize=span_size,
             color=span_color,

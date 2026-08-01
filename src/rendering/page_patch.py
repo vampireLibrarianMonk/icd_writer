@@ -617,6 +617,26 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
                 fontname=builtin, fontsize=font_size, color=color,
             )
         return []
+    elif len(old_text) < 120 and "\n" not in old_text:
+        # SHORT INLINE REPLACEMENT — for TOC entries, short titles, labels.
+        # Just redact the found rect and insert new text at the same position.
+        # Do NOT trigger paragraph reflow (which would destroy surrounding content
+        # by redacting the entire containing block).
+        page.add_redact_annot(rect, fill=(1, 1, 1))
+        page.apply_redactions()
+
+        font_obj = _get_font_object(font_name, bold, italic)
+        if font_obj:
+            tw = fitz.TextWriter(page.rect)
+            tw.append(fitz.Point(rect.x0, baseline_y), new_text, font=font_obj, fontsize=font_size)
+            tw.write_text(page, color=color)
+        else:
+            builtin = _get_pymupdf_fontname(font_name, bold, italic)
+            page.insert_text(
+                fitz.Point(rect.x0, baseline_y), new_text,
+                fontname=builtin, fontsize=font_size, color=color,
+            )
+        return []
     else:
         # PARAGRAPH: full block reflow — returns overflow lines
         return _patch_paragraph_line(page, rect, old_text, new_text,

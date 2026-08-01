@@ -677,9 +677,15 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
 
         # DON'T redact the section number span ("4.") — leave it in place.
         # Only the title+dots span gets redacted and replaced.
-        # Strip the section number prefix from new_text so we only insert the title.
+        # Strip the section number prefix from new_text ONLY for TOC entries
+        # (when a dots span was found). For non-TOC edits, use new_text as-is.
         import re as _re
-        new_title_only = _re.sub(r"^\d+[\.\d]*\.?\s*", "", new_text).strip()
+        if redact_rect != rect:
+            # TOC entry: we found a dots span, so strip the section number
+            new_title_only = _re.sub(r"^\d+[\.\d]*\.?\s*", "", new_text).strip()
+        else:
+            # Non-TOC short inline edit: use new_text directly
+            new_title_only = new_text
 
         page.add_redact_annot(redact_rect, fill=(1, 1, 1))
         page.apply_redactions()

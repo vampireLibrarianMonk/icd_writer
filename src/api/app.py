@@ -928,6 +928,32 @@ def create_app() -> FastAPI:
             for edit in edits:
                 _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
 
+        # If overflow occurred, redact moved content from the source page
+        # (blocks that the IR moved to the overflow page still exist on the source)
+        if doc_ir.page_count > source_page_count:
+            for action in session.actions:
+                if action.action_type == ActionType.BLOCK_EDITED and action.page:
+                    edited_page_num = action.page
+                    if edited_page_num > source_page_count:
+                        continue
+                    # Find what blocks are on the overflow page (IR page edited_page+1)
+                    overflow_ir_idx = edited_page_num  # 0-based index of overflow page in IR
+                    if overflow_ir_idx < len(doc_ir.pages):
+                        overflow_page_info = doc_ir.pages[overflow_ir_idx]
+                        # Search for these blocks' text on the source page and redact them
+                        source_page = source_doc[edited_page_num - 1]
+                        for block in overflow_page_info.text_blocks:
+                            # Search for this block's text on the source page
+                            search_text = block.text_verbatim[:50].split("\n")[0].strip()
+                            if len(search_text) < 5:
+                                continue
+                            instances = source_page.search_for(search_text)
+                            if instances:
+                                # Redact this text (it moved to the overflow page)
+                                source_page.add_redact_annot(instances[0], fill=(1, 1, 1))
+                        source_page.apply_redactions()
+                    break
+
         if doc_ir.page_count <= source_page_count:
             source_doc.save(str(output_path))
             source_doc.close()
@@ -1745,6 +1771,27 @@ def create_app() -> FastAPI:
             page = source_doc[page_num - 1]
             for edit in edits:
                 _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
+
+        # If overflow occurred, redact moved content from the source page
+        if doc_ir.page_count > source_page_count:
+            for action in session.actions:
+                if action.action_type == ActionType.BLOCK_EDITED and action.page:
+                    edited_page_num = action.page
+                    if edited_page_num > source_page_count:
+                        continue
+                    overflow_ir_idx = edited_page_num
+                    if overflow_ir_idx < len(doc_ir.pages):
+                        overflow_page_info = doc_ir.pages[overflow_ir_idx]
+                        source_page = source_doc[edited_page_num - 1]
+                        for block in overflow_page_info.text_blocks:
+                            search_text = block.text_verbatim[:50].split("\n")[0].strip()
+                            if len(search_text) < 5:
+                                continue
+                            instances = source_page.search_for(search_text)
+                            if instances:
+                                source_page.add_redact_annot(instances[0], fill=(1, 1, 1))
+                        source_page.apply_redactions()
+                    break
 
         if doc_ir.page_count <= source_page_count:
             # No new pages — just save the patched source

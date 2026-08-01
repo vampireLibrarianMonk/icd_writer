@@ -930,22 +930,21 @@ def create_app() -> FastAPI:
                 rebuilt.close()
                 if overflow:
                     all_overflow_lines.extend(overflow)
+                    # Insert overflow page immediately after the edited page
+                    page_info = doc_ir.pages[0]
+                    new_page = output_doc.new_page(width=page_info.width_pt, height=page_info.height_pt)
+                    y = 72.0
+                    for line_text in all_overflow_lines:
+                        new_page.insert_text(
+                            fitz.Point(90, y + 12),
+                            line_text,
+                            fontname="tiro", fontsize=12, color=(0, 0, 0),
+                        )
+                        y += 14
+                    all_overflow_lines = []
             else:
                 # Copy unchanged page from source
                 output_doc.insert_pdf(source_doc, from_page=page_idx, to_page=page_idx)
-
-        # If there are overflow lines, add a continuation page
-        if all_overflow_lines:
-            page_info = doc_ir.pages[0]  # Use first page dimensions
-            new_page = output_doc.new_page(width=page_info.width_pt, height=page_info.height_pt)
-            y = 72.0
-            for line_text in all_overflow_lines:
-                new_page.insert_text(
-                    fitz.Point(90, y + 12),
-                    line_text,
-                    fontname="tiro", fontsize=12, color=(0, 0, 0),
-                )
-                y += 14
 
         output_doc.save(str(output_path))
         output_doc.close()

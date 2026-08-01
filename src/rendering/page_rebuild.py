@@ -318,11 +318,13 @@ def _write_edited_block(
             color=(r, g, b),
         )
 
-    # Store overflow lines on the page object for the export to retrieve
+    # Return overflow lines for the export to use
     if overflow_lines:
         if not hasattr(target_page, "_overflow_lines"):
             target_page._overflow_lines = []
         target_page._overflow_lines.extend(overflow_lines)
+
+    return overflow_lines
 
 
 
@@ -382,5 +384,3 @@ def _word_wrap_simple(text: str, max_width: float, font, font_size: float) -> li
         lines.append(current)
 
     return lines
-
-    return overflow_lines

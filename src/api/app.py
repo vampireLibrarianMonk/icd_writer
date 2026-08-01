@@ -984,7 +984,10 @@ def create_app() -> FastAPI:
                 continue
             page = source_doc[page_num - 1]
             for edit in edits:
-                overflow = _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
+                overflow = _apply_edit_to_page(
+                    page, edit["old_text"], edit["new_text"],
+                    inline=edit.get("inline", False),
+                )
                 if overflow:
                     all_overflow.extend(overflow)
 
@@ -1723,7 +1726,13 @@ def create_app() -> FastAPI:
                         ActionType.BLOCK_EDITED,
                         page=page,
                         block_id=block.id,
-                        data={"old_text": old_text, "new_text": new_text},
+                        data={
+                            "old_text": old_text,
+                            "new_text": new_text,
+                            "patch_old": old_text,
+                            "patch_new": new_text,
+                            "inline": True,
+                        },
                     )
 
                 return {"status": "updated", "block_id": block.id}

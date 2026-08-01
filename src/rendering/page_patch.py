@@ -230,7 +230,7 @@ def patch_page(
         if old_text == new_text:
             continue
 
-        _apply_edit_to_page(page, old_text, new_text)
+        _apply_edit_to_page(page, old_text, new_text, inline=edit.get("inline", False))
 
     # Render to PNG
     pix = page.get_pixmap(dpi=150)
@@ -300,7 +300,7 @@ def patch_page_to_pdf(
         if old_text == new_text:
             continue
 
-        _apply_edit_to_page(page, old_text, new_text)
+        _apply_edit_to_page(page, old_text, new_text, inline=edit.get("inline", False))
 
     # Save as single-page PDF bytes
     # Create a new doc with just this page
@@ -559,14 +559,14 @@ def _patch_paragraph_line(
     return overflow_lines
 
 
-def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[str]:
+def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str, inline: bool = False) -> list[str]:
     """Apply a single text edit to a PDF page.
 
-    Uses the same logic as the page image renderer:
-    - Finds the old text on the page
-    - Detects alignment (table center vs paragraph)
-    - For paragraphs: reflows the entire paragraph block
-    - For tables: centers the new text in the cell
+    Args:
+        old_text: Text to find and replace
+        new_text: Replacement text
+        inline: If True, do simple rect redact+insert (for table cells).
+                Skips paragraph reflow and TOC detection.
 
     Returns:
         List of overflow lines that didn't fit on the page (empty if all fit).
@@ -597,7 +597,97 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
     font_name, font_size, baseline_y, bold, italic, color = _extract_font_info(page, rect, old_text)
     alignment = _detect_alignment(page, rect, old_text)
 
-    if alignment == "center":
+    # INLINE mode: simple redact + insert (for table cells and similar)
+    if inline:
+        redact_rect = fitz.Rect(
+            rect.x0 + 0.5, rect.y0 + 0.5,
+            rect.x1 - 0.5, rect.y1 - 1.0,
+        )
+        page.add_redact_annot(redact_rect, fill=(1, 1, 1))
+        page.apply_redactions()
+        builtin = _get_pymupdf_fontname(font_name, bold, italic)
+        page.insert_text(
+            fitz.Point(rect.x0, baseline_y), new_text,
+            fontname=builtin, fontsize=font_size, color=color,
+        )
+        return []
+
+    # Check if this is a TOC entry edit (short text + dots span on the page)
+    is_toc_edit = False
+    if len(old_text) < 120 and "\n" not in old_text:
+        raw_check = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        search_word = old_text.split()[-1]
+        for block in raw_check.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    span_text = "".join(c["c"] for c in chars)
+                    if search_word in span_text and "..." in span_text:
+                        is_toc_edit = True
+                        break
+                if is_toc_edit:
+                    break
+            if is_toc_edit:
+                break
+
+    if is_toc_edit:
+        # TOC ENTRY — redact the full title+dots span, insert just the new title
+        # at the original x-position (preserving indent alignment).
+        redact_rect = rect
+        insert_x = rect.x0
+        span_font = font_name
+        span_size = font_size
+        span_bold = bold
+        span_italic = italic
+        span_baseline = baseline_y
+        span_color = color
+
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    span_text = "".join(c["c"] for c in chars)
+                    search_word = old_text.split()[-1]
+                    if search_word in span_text and "..." in span_text:
+                        redact_rect = fitz.Rect(span["bbox"])
+                        insert_x = span["bbox"][0]
+                        span_font = span.get("font", font_name)
+                        span_size = span.get("size", font_size)
+                        flags = span.get("flags", 0)
+                        span_bold = bool(flags & (1 << 4)) or "bold" in span_font.lower()
+                        span_italic = bool(flags & (1 << 1)) or "italic" in span_font.lower()
+                        origin = span.get("origin")
+                        if origin:
+                            span_baseline = origin[1]
+                        color_int = span.get("color", 0)
+                        cr = ((color_int >> 16) & 0xFF) / 255.0
+                        cg = ((color_int >> 8) & 0xFF) / 255.0
+                        cb = (color_int & 0xFF) / 255.0
+                        span_color = (cr, cg, cb)
+                        break
+
+        # Strip section number from new_text for TOC entries
+        import re as _re
+        new_title_only = _re.sub(r"^\d+[\.\d]*\.?\s*", "", new_text).strip()
+
+        page.add_redact_annot(redact_rect, fill=(1, 1, 1))
+        page.apply_redactions()
+
+        builtin = _get_pymupdf_fontname(span_font, span_bold, span_italic)
+        page.insert_text(
+            fitz.Point(insert_x, span_baseline),
+            new_title_only,
+            fontname=builtin,
+            fontsize=span_size,
+            color=span_color,
+        )
+        return []
+    elif alignment == "center":
         # TABLE CELL — shrink the redaction rect slightly to avoid
         # covering the cell border lines (drawn as thin filled rectangles
         # just below/beside the text bbox).
@@ -623,82 +713,6 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
         page.insert_text(
             fitz.Point(insert_x, baseline_y), new_text,
             fontname=builtin, fontsize=font_size, color=color,
-        )
-        return []
-    elif len(old_text) < 120 and "\n" not in old_text:
-        # SHORT INLINE REPLACEMENT — for TOC entries, short titles, labels.
-        # Just redact the found rect and insert new text at the same position.
-        # Do NOT trigger paragraph reflow (which would destroy surrounding content
-        # by redacting the entire containing block).
-        #
-        # For TOC entries: the search rect may only cover the title text, but
-        # the full line includes leader dots and page number. Find the containing
-        # span in rawdict to get the full visual extent of the line, the correct
-        # font, and the correct insertion point.
-        redact_rect = rect
-        insert_x = rect.x0
-        span_font = font_name
-        span_size = font_size
-        span_bold = bold
-        span_italic = italic
-        span_baseline = baseline_y
-        span_color = color
-
-        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
-        for block in raw.get("blocks", []):
-            if block.get("type") != 0:
-                continue
-            for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    chars = span.get("chars", [])
-                    span_text = "".join(c["c"] for c in chars)
-                    # Find the span that contains the core of our search text
-                    # (last word of old_text to avoid matching the section number)
-                    search_word = old_text.split()[-1]  # e.g., "Interface"
-                    if search_word in span_text and "..." in span_text:
-                        # This is the TOC entry span — use its full extent
-                        redact_rect = fitz.Rect(span["bbox"])
-                        insert_x = span["bbox"][0]
-                        span_font = span.get("font", font_name)
-                        span_size = span.get("size", font_size)
-                        flags = span.get("flags", 0)
-                        span_bold = bool(flags & (1 << 4)) or "bold" in span_font.lower()
-                        span_italic = bool(flags & (1 << 1)) or "italic" in span_font.lower()
-                        origin = span.get("origin")
-                        if origin:
-                            span_baseline = origin[1]
-                        # Extract color
-                        color_int = span.get("color", 0)
-                        cr = ((color_int >> 16) & 0xFF) / 255.0
-                        cg = ((color_int >> 8) & 0xFF) / 255.0
-                        cb = (color_int & 0xFF) / 255.0
-                        span_color = (cr, cg, cb)
-                        break
-
-        # DON'T redact the section number span ("4.") — leave it in place.
-        # Only the title+dots span gets redacted and replaced.
-        # Strip the section number prefix from new_text ONLY for TOC entries
-        # (when a dots span was found). For non-TOC edits, use new_text as-is.
-        import re as _re
-        if redact_rect != rect:
-            # TOC entry: we found a dots span, so strip the section number
-            new_title_only = _re.sub(r"^\d+[\.\d]*\.?\s*", "", new_text).strip()
-        else:
-            # Non-TOC short inline edit: use new_text directly
-            new_title_only = new_text
-
-        page.add_redact_annot(redact_rect, fill=(1, 1, 1))
-        page.apply_redactions()
-
-        # Insert the title text (without section number) at the title x-position.
-        # This preserves the original indentation alignment with other entries.
-        builtin = _get_pymupdf_fontname(span_font, span_bold, span_italic)
-        page.insert_text(
-            fitz.Point(insert_x, span_baseline),
-            new_title_only,
-            fontname=builtin,
-            fontsize=span_size,
-            color=span_color,
         )
         return []
     else:
@@ -797,11 +811,13 @@ def get_page_edits_from_session(session, document_ir: DocumentIR, page_number: i
         # TOC edits store explicit patch targets
         patch_old = action.data.get("patch_old", "")
         patch_new = action.data.get("patch_new", "")
+        is_inline = action.data.get("inline", False)
 
         if block_id not in block_edits:
             block_edits[block_id] = {
                 "old_text": old_text, "new_text": new_text,
                 "patch_old": patch_old, "patch_new": patch_new,
+                "inline": is_inline,
                 "block_id": block_id,
             }
         else:
@@ -820,12 +836,13 @@ def get_page_edits_from_session(session, document_ir: DocumentIR, page_number: i
         if old_full == new_full:
             continue
 
-        # If explicit patch targets are provided (TOC edits), use them directly
+        # If explicit patch targets are provided (TOC/table-cell edits), use them directly
         if patch_old and patch_new and patch_old != patch_new:
             result.append({
                 "old_text": patch_old,
                 "new_text": patch_new,
                 "block_id": edit["block_id"],
+                "inline": edit.get("inline", False),
             })
             continue
 

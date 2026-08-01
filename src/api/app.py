@@ -1472,6 +1472,108 @@ def create_app() -> FastAPI:
 
         return {"is_toc": len(merged) >= 3, "entries": merged}
 
+    @app.put("/document/page/{page_number}/toc")
+    def edit_toc_entry(page_number: int, index: int, title: str = "", page_ref: str = ""):
+        """Edit a TOC entry (title and/or page number).
+
+        Stores the edit in the session so it can be applied on export/preview.
+        The edit is recorded as a BLOCK_EDITED action on the TOC page.
+        """
+        import fitz
+
+        session = state["session"]
+        doc_ir = state["document_ir"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        # Get the current TOC entries to find what we're replacing
+        toc_res = get_toc(page_number)
+        if not toc_res["is_toc"]:
+            raise HTTPException(400, f"Page {page_number} is not a TOC page")
+
+        entries = toc_res["entries"]
+        if index < 0 or index >= len(entries):
+            raise HTTPException(400, f"Invalid entry index: {index}")
+
+        old_entry = entries[index]
+        old_title = old_entry["title"]
+        old_page_ref = old_entry["page_ref"]
+
+        new_title = title if title else old_title
+        new_page_ref = page_ref if page_ref else old_page_ref
+
+        if new_title == old_title and new_page_ref == old_page_ref:
+            return {"status": "unchanged"}
+
+        # Find the old text on the PDF page to construct the patch
+        # TOC lines have the format: "Title ...dots... page_number"
+        # We need to find what's searchable on the page for this entry
+        doc = fitz.open(session.document_path)
+        page = doc[page_number - 1]
+
+        # Strategy: search for the title text (without dots/page num)
+        # The rawdict shows the line as "Title ...dots...N" in one span
+        old_search = old_title.strip()
+        instances = page.search_for(old_search)
+        doc.close()
+
+        if not instances:
+            raise HTTPException(404, f"Could not find '{old_search}' on page {page_number}")
+
+        # Build the old and new full-line representations
+        # For the IR block, store the edit as title replacement
+        # Find the IR block that contains this TOC entry and record
+        # a targeted edit that _apply_edit_to_page can find uniquely.
+        if doc_ir and page_number <= len(doc_ir.pages):
+            page_info = doc_ir.pages[page_number - 1]
+            import re as _re
+            # Strip leading section number pattern like "4." or "3.2.1."
+            title_without_num = _re.sub(r"^\d+[\.\d]*\.?\s*", "", old_title).strip()
+            new_title_without_num = _re.sub(r"^\d+[\.\d]*\.?\s*", "", new_title).strip()
+            search_key = title_without_num if title_without_num else old_title
+
+            for block in page_info.text_blocks:
+                if search_key in block.text_verbatim:
+                    old_ir_text = block.text_verbatim
+                    new_ir_text = old_ir_text.replace(title_without_num, new_title_without_num, 1)
+
+                    if old_page_ref and new_page_ref != old_page_ref:
+                        new_ir_text = _re.sub(
+                            rf"(\.{{3,}}\s*){_re.escape(old_page_ref)}(\s|$)",
+                            rf"\g<1>{new_page_ref}\2",
+                            new_ir_text,
+                            count=1,
+                        )
+
+                    block.text_verbatim = new_ir_text
+
+                    # Record the edit. The undo system uses old_text/new_text to
+                    # reverse the IR change. For PDF patching, get_page_edits_from_session
+                    # uses old_text to search on the page. Store the IR-level
+                    # texts so undo works, and add a "patch_old"/"patch_new" for
+                    # the PDF-level search.
+                    session.record(
+                        ActionType.BLOCK_EDITED,
+                        page=page_number,
+                        block_id=block.id,
+                        data={
+                            "old_text": old_ir_text,
+                            "new_text": new_ir_text,
+                            "patch_old": old_title,
+                            "patch_new": new_title,
+                        },
+                    )
+                    break
+
+        return {
+            "status": "updated",
+            "old_title": old_title,
+            "new_title": new_title,
+            "old_page_ref": old_page_ref,
+            "new_page_ref": new_page_ref,
+        }
+
+
 
     @app.get("/document/page/{page_number}/header-footer")
     def get_header_footer(page_number: int):

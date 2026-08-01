@@ -1,6 +1,6 @@
 # ICD Writer — User Guide
 
-**Version 1.1.0**
+**Version 1.2.1**
 
 ---
 
@@ -235,7 +235,30 @@ When an edit makes a block too large for the remaining page space, overflowing c
 
 ---
 
-### 4.5 Undo and Redo
+### 4.5 Editing the Table of Contents
+
+1. Navigate to **page 3** (Table of Contents)
+2. The **TOC Editor** panel appears automatically below the document viewer
+3. Click any entry row — it becomes editable (title + page number)
+4. Change a title, e.g., rename *"4. Electrical Interface"* to *"4. Electrical & Data Interface"*
+5. Press **Enter** or click **✓** to save
+6. The document viewer updates showing the modified TOC entry
+7. **File > Export PDF...** — the exported PDF reflects the title change on the TOC page
+
+**What gets patched:**
+
+| Field | Behavior |
+|-------|----------|
+| Title | Old title found on PDF page, redacted, replaced with new title |
+| Page reference | The page number at the end of the dot leader is updated |
+| Leader dots | Preserved (only the title/number text changes) |
+| Indentation | Preserved (same x-position as original) |
+
+**Undo/Redo:** TOC edits support the same undo/redo as paragraph edits — **File > Undo** reverts the TOC change and restores the original page image.
+
+---
+
+### 4.6 Undo and Redo
 
 All edits support undo/redo:
 

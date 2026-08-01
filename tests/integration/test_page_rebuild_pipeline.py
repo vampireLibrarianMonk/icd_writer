@@ -361,3 +361,66 @@ class TestTBRReplacement:
         else:
             # Table cell not found via exact match — acceptable (structure varies)
             pytest.skip("Table cell '30W' not found on page 7")
+
+
+# ─── TOC Editing Tests ────────────────────────────────────────────────
+
+
+@pytest.mark.skipif(not HSI_PDF.exists(), reason="HSI PDF not found")
+class TestTOCEditing:
+    """Test Table of Contents entry editing."""
+
+    def test_toc_edit_changes_preview(self, client):
+        """Editing a TOC entry changes the TOC page image."""
+        img_before = client.get("/document/page/3/image").content
+
+        res = client.put(
+            "/document/page/3/toc?index=21"
+            "&title=4.+Electrical+%26+Data+Interface&page_ref=4"
+        )
+        assert res.json()["status"] == "updated"
+
+        img_after = client.get("/document/page/3/image").content
+        assert img_before != img_after, "TOC page image must change after edit"
+
+    def test_toc_edit_appears_in_export(self, client):
+        """Edited TOC entry text appears in the exported PDF."""
+        client.put(
+            "/document/page/3/toc?index=21"
+            "&title=4.+Electrical+%26+Data+Interface&page_ref=4"
+        )
+
+        export_res = client.get("/document/export-download?filename=test.pdf")
+        assert export_res.status_code == 200
+
+        doc = fitz.open(stream=export_res.content, filetype="pdf")
+        toc_text = " ".join(doc[2].get_text("text").split())
+        doc.close()
+        assert "Electrical & Data Interface" in toc_text, (
+            "Edited TOC title not found in export"
+        )
+
+    def test_toc_edit_undo_restores_original(self, client):
+        """Undo reverts the TOC edit and restores the original page image."""
+        img_original = client.get("/document/page/3/image").content
+
+        client.put(
+            "/document/page/3/toc?index=6"
+            "&title=2.+Structural+Interface&page_ref=2"
+        )
+        img_edited = client.get("/document/page/3/image").content
+        assert img_edited != img_original
+
+        # Undo
+        client.post("/document/undo")
+        img_undone = client.get("/document/page/3/image").content
+        assert img_undone == img_original, "Undo must restore original TOC image"
+
+    def test_toc_page_ref_change(self, client):
+        """Changing just the page reference number works."""
+        res = client.put(
+            "/document/page/3/toc?index=21"
+            "&title=4.+Electrical+Interface&page_ref=7"
+        )
+        assert res.json()["status"] == "updated"
+        assert res.json()["new_page_ref"] == "7"

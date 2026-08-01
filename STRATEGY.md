@@ -2,295 +2,145 @@
 
 ## 1. Project Objective
 
-Build a fully automated pipeline that converts NASA Interface Control Document (ICD) PDFs into an editable, version-controlled intermediate representation, then regenerates faithful PDFs. The pipeline operates without ML models, manual layout files, or per-page tuning.
+Build a web-based editor for NASA Interface Control Documents (ICDs). The system ingests PDF ICDs, extracts their structure into an editable intermediate representation, provides AI-powered search across the corpus, tracks unresolved items (TBD/TBR), compares document revisions, and exports edited PDFs with pixel-perfect fidelity for unedited content.
 
-### What Was Proven
+### Origin
 
-On a 35-page NASA LVC ICD (digitally generated, MS Word 2013 origin):
-- Cover pages: 98% pixel match
-- Image-only pages: 100% pixel match
-- Table pages: 95-99% pixel match
-- Diagram pages: 91-95% pixel match
-- Dense text pages: 89-95% pixel match (limited by font substitution)
-- Full document processed in a single automated pass
+The v1 attempt (icd_venture) proved that digitally-generated PDFs already contain all information needed for faithful reproduction — exact character coordinates, vector geometry, embedded images. No layout inference or OCR is needed. The v2 approach (this project) builds on that insight: extract what the PDF knows, make it editable, and write it back.
 
-### What the v1 Attempt (icd_venture) Showed
+### Current State
 
-The v1 repo attempted diagram-first reconstruction using custom `.idtr` format, PlantUML, and manual layout.json files. After extensive effort:
-- Pages 5-6 required hand-tuned positioning
-- Pixel scores were misleading (80% match on a 90% white-space page)
-- Diagrams needed manual connection routing
-- No general solution emerged for non-diagram pages
-
-The v2 approach inverts this: extract everything the PDF already knows (positions, fonts, geometry) and render it back. No inference needed for digitally-generated PDFs.
+The system is operational with a full Docker deployment (frontend + backend + OpenSearch). Users can upload PDFs, search across them with AI-generated answers, edit text in-place (paragraphs, tables, TOC entries), track TBD/TBR items across documents, compare revisions, and export edited PDFs.
 
 ---
 
 ## 2. Core Architecture
 
 ```text
-Original PDF
-    → PyMuPDF extraction (rawdict: char positions, fonts, images, drawings)
-    → Element classification (text, image, path, rect, line)
-    → Document IR (YAML/JSON — the editable intermediate)
-    → HTML/CSS rendering (word-level absolute positioning)
-    → WeasyPrint PDF generation
-    → Visual fidelity comparison (pixel-level)
+Browser (React)  →  Backend API (FastAPI)  →  OpenSearch (search index)
+                                            →  AWS Bedrock (embeddings + RAG)
+                                            →  Source PDFs (on disk)
 ```
 
-### Key Insight
+### Editing Pipeline
 
-PDF is not a mystery box. A digitally-generated PDF stores exact coordinates for every character, the precise placement of every image, and the vector geometry of every drawn shape. The pipeline reads these coordinates and places elements back at the same positions. No layout inference, no OCR, no model required.
+```text
+Source PDF (read-only on disk)
+    → PyMuPDF extraction → Document IR (in-memory Pydantic model)
+    → User edits block text in the UI → IR updated
+    → Preview: patch source page in-place (redact + insert) → PNG
+    → Export: same patch approach → save modified PDF
+```
 
----
+The key insight for editing: **don't rebuild the whole page**. Patch only the edited text on the source PDF page. Unedited content stays pixel-perfect because it's never touched.
 
-## 3. What Actually Works (Proven Techniques)
+### Search Pipeline
 
-### 3.1 Word-Level Positioning
-
-Each text span is split at word boundaries. Each word is positioned at its exact PDF x-coordinate using CSS `position:absolute; left:{x}pt`. The `overflow:hidden` property clips any glyph-width overrun from font metric differences, preventing column bleed in tables.
-
-**Why word-level, not character-level:** Character-level creates massive HTML (one `<span>` per character). Word-level provides the same column-bleed protection with 5-10x fewer DOM elements. The space between words is handled by absolute positioning — the "space bar" provides infinite fine-tuning.
-
-### 3.2 Stroke Width Calibration
-
-PDF stroke widths include antialiased spread that the renderer adds. Empirical alpha loop testing showed that rendering at **0.5× the stated stroke width** produces visual output matching the original PDF viewer. This was measured by sweeping 0.4-1.2x and selecting the scale that maximized F1 score against the source.
-
-### 3.3 Font Substitution Strategy
-
-| PDF Font | System Substitute | Package |
-|----------|------------------|---------|
-| Calibri | Carlito | `fonts-crosextra-carlito` |
-| Cambria | Caladea | `fonts-crosextra-caladea` |
-| Arial | Liberation Sans | `fonts-liberation2` |
-| Times New Roman | Liberation Serif | `fonts-liberation2` |
-| Courier New | Liberation Mono | `fonts-liberation2` |
-
-These are metric-compatible substitutes — same character widths, different glyph outlines. The remaining ~10% content pixel difference on dense text pages is from glyph shape antialiasing, not positioning errors.
-
-**Critical discovery:** Without Carlito, Calibri falls back to DejaVu Sans (much wider), causing diagram label text to overflow element boxes. Installing the correct metric-compatible font immediately resolved diagram text truncation.
-
-### 3.4 Connector Image Filtering
-
-PDF diagrams often contain solid-black narrow PNG images that duplicate stroked line drawings. These render as thick bars in HTML (the full image width) while the PDF viewer treats them as thin connector overlays. Detection: any image where `width < 10pt` and all pixels are dark (RGB max < 30) is skipped. The stroked drawing provides the visual connector.
-
-### 3.5 Bordered Box Inset (Border Cropping)
-
-Diagram element images (UAS Sim, CSD, etc.) have 7px black borders in the source PNG. When adjacent boxes overlap by 1pt, both borders stack into a 5pt dark band. Fix: detect black borders by scanning edge pixels, check that the interior is light (mean > 128), then crop the border pixels and adjust the bbox inward. Dark-interior images (backgrounds for white text) are left untouched.
-
-### 3.6 SVG Path Rendering with Discontinuity Detection
-
-Complex shapes (cloud/ellipse forms) are composed of multiple disconnected bezier curve segments. Each segment's start point is compared to the previous segment's endpoint. If they don't match (gap > 0.5pt), a new `M` (moveto) command is inserted in the SVG path. This prevents incorrect straight-line connections between scalloped bumps.
-
-### 3.7 Image Extraction with Content-Aware Processing
-
-Images are extracted via PyMuPDF's `extract_image()` and placed at their exact `get_image_rects()` coordinates. Three processing rules apply:
-1. **Solid black + narrow** → skip (connector artifact)
-2. **Has dark border + light interior** → crop border, adjust bbox
-3. **Has dark border + dark interior** → keep as-is (background element)
-
----
-
-## 4. What Limits Visual Fidelity
-
-### 4.1 Font Glyph Rendering (Dominant Factor)
-
-Dense text pages score 67-70% F1 despite perfect positioning. This is entirely from antialiased glyph shape differences between:
-- The original renderer (MS Word → PDF via its internal engine)
-- The regeneration renderer (WeasyPrint/FreeType with Liberation Serif/Carlito)
-
-The characters are in the right position, at the right size, in the right font weight. The outlines differ at the subpixel level. This is the inherent cost of using a different rendering engine with metric-compatible (but not identical) font files.
-
-**Possible improvements:**
-- Install actual Microsoft TrueType core fonts (licensing dependent)
-- Use a two-pass render to measure actual glyph widths and apply `letter-spacing` corrections
-- Embed fonts extracted from the source PDF (when available)
-
-### 4.2 Image Interpolation
-
-Small diagram element PNGs (e.g., 139×84px displayed at 50×30pt) are scaled by different interpolation algorithms in the PDF viewer vs WeasyPrint. This produces slightly different antialiased edges. Not fixable without matching the exact scaling algorithm.
-
-### 4.3 Z-Order Artifacts
-
-PDF content streams render elements in order — later elements cover earlier ones. Our pipeline extracts all text and images independently, then renders images before text. This means white text that was hidden behind a later-drawn image in the original may become faintly visible in the regeneration. These are artifacts already present in the PDF data, not introduced errors.
-
----
-
-## 5. Technology Stack (Proven)
-
-| Component | Tool | Role |
-|-----------|------|------|
-| PDF extraction | PyMuPDF 1.25.5 | rawdict, images, drawings, content streams |
-| Rendering | WeasyPrint 69.0 | HTML/CSS to PDF |
-| Data models | Pydantic 2.11.3 | Document IR, ICD IR, validation |
-| Serialization | PyYAML 6.0.2 | Canonical intermediate format |
-| Comparison | NumPy + Pillow | Pixel-level fidelity scoring |
-| API (future) | FastAPI 0.115.12 | Document processing endpoints |
-
-### System Dependencies
-
-```bash
-# Font packages (required for visual fidelity)
-sudo apt install fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation2
-
-# WeasyPrint rendering libraries
-sudo apt install libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
+```text
+Document IR → chunking (paragraph/sliding window) → embeddings (Bedrock Titan V2)
+    → OpenSearch kNN index (1024d vectors) + BM25 keyword index
+    → Hybrid retrieval (RRF fusion) → RAG generation (Nova Pro) → Answer + Citations
 ```
 
 ---
 
-## 6. Two-Layer Intermediate Representation
+## 3. Delivery Phases
 
-### Document IR (Implemented)
+### Phase 1: Foundation — COMPLETE
 
-Physical layout: pages, text blocks with character-level positions, font info, bounding boxes, reading order, images, vector drawings, page classification.
+PDF extraction, Document IR, HTML/CSS rendering, visual fidelity comparison, font substitution, Docker containerization.
 
-```yaml
-metadata:
-  filename: 20150010976.pdf
-  sha256: a604e12ab55882e676cd83c0e907f3f0fe5c137188b0f81772a8d04e677ecc30
-  page_count: 35
-pages:
-  - page_number: 1
-    classification: [native_digital_text, cover]
-    text_blocks:
-      - id: block-p01-b00
-        text_verbatim: "Live Virtual Constructive"
-        bbox: {x0: 288.4, y0: 90.0, x1: 577.9, y1: 116.8}
-        style: {font_name: "Arial,Bold", font_size_pt: 24.0, bold: true}
-```
+### Phase 2: Editing Pipeline — COMPLETE
 
-### Semantic ICD IR (Modeled, Not Yet Populated)
+- Click-to-edit text blocks in the browser
+- Paragraph reflow (word-wrap within block width)
+- Page extension (overflow creates new pages)
+- Undo/redo with session journal
+- PDF export with 1:1 page patching
+- Table cell editing (centered, border-preserving)
+- TOC entry editing (title + page reference)
+- Heading preservation (bold headings stay intact when paragraph below is edited)
 
-Engineering meaning: requirements, interfaces, messages, signals, systems, protocols, verification methods. Linked to Document IR through stable identifiers.
+### Phase 3: Semantic Layer — COMPLETE
 
-```yaml
-requirements:
-  - id: REQ-CMD-001
-    text_verbatim: "The flight computer shall accept command transfer frames."
-    requirement_type: interface_requirement
-    verification_method: test
-    source: {page: 12, block_id: block-p12-b07}
-```
+- TBD/TBR/TBC/TBS detection and tracking
+- Cross-document correlation and conflict detection
+- Status management (Open → Assigned → Resolved → Verified)
+- Requirement extraction from "shall" statements
+- Version comparison (structured diff with AI summaries)
 
----
+### Phase 4: Search and Intelligence — COMPLETE
 
-## 7. Delivery Phases (Updated)
+- OpenSearch hybrid indexing (BM25 + kNN vector)
+- Multiple index configurations (paragraph, sliding window, Titan V2, Cohere V3)
+- RAG pipeline with citations and confidence scoring
+- Upload & Index pipeline with real-time progress
+- TBD Dashboard (cross-document, filterable, navigable)
+- Cost tracking per operation
 
-### Phase 1: Foundation ✓ COMPLETE
+### Phase 5: Production Hardening — IN PROGRESS
 
-- [x] PDF ingestion with SHA-256 hashing
-- [x] Page classification (12 types)
-- [x] Character-level text extraction
-- [x] Image extraction with border detection
-- [x] Vector graphics extraction (lines, rects, bezier curves)
-- [x] Document IR (Pydantic models, YAML/JSON serialization)
-- [x] HTML/CSS rendering with word-level positioning
-- [x] WeasyPrint PDF generation (single + multi-page)
-- [x] Visual fidelity comparison
-- [x] Stroke calibration via alpha loop
-- [x] Font substitution mapping
-- [x] Connector image filtering
-- [x] Bordered box cropping
-- [x] SVG path discontinuity handling
-- [x] CLI (info, ingest, render)
-- [x] Containerization prep (Dockerfile, setup.sh)
-- [x] 23 passing tests
-
-### Phase 2: Editing Pipeline (Next)
-
-- [ ] Edit text in the IR and re-render
-- [ ] Track changes between IR versions
-- [ ] Selective re-rendering (only modified pages)
-- [ ] Z-order-aware text filtering (hide covered text)
-- [ ] Requirement extraction from body text
-- [ ] Table structure extraction (logical rows/columns)
-
-### Phase 3: Semantic Layer
-
-- [ ] TBD/TBR tracker (detect, tag status, assign owner, resolution target dates)
-- [ ] Requirement tagging in IR (link "shall" statements to requirement IDs)
-- [ ] Interface identification (provider/consumer/protocol)
-- [ ] Cross-reference linking (section refs, figure refs, table refs)
-- [ ] Semantic validation (unique IDs, all refs resolve, no orphans)
-- [ ] Revision comparison (diff two document versions side-by-side)
-
-### Phase 4: Search and Intelligence (Optional)
-
-- [ ] OpenSearch indexing (derived from canonical IR)
-- [ ] Keyword + vector hybrid search
-- [ ] Amazon Bedrock for classification assistance
-- [ ] RAG over ICD corpus
-- [ ] Cross-document traceability
-- [ ] TBD dashboard (cross-document status, alerts, blocking analysis)
+- Integration test suite (17 tests covering edit/preview/export/undo/redo/overflow/TOC)
+- Docker compose with volume mounts for development
+- Frontend refresh triggers on all edit operations
+- Overflow content merges onto next page (no superimposition)
 
 ---
 
-## 8. Metrics and Acceptance
+## 4. Key Design Decisions
 
-### Visual Fidelity Thresholds
+### Patch vs Rebuild
 
-| Page Type | Pixel Match | F1 Score | Status |
-|-----------|-------------|----------|--------|
-| Image-only | ≥99% | ≥99% | ✓ Achieved |
-| Cover/title | ≥97% | ≥85% | ✓ Achieved |
-| Tables | ≥94% | ≥75% | ✓ Achieved |
-| Diagrams | ≥90% | ≥75% | ✓ Achieved |
-| Dense text | ≥88% | ≥67% | ✓ Achieved |
+The system patches the source PDF page in-place (redact old text → insert new text) rather than reconstructing pages from scratch. This preserves all fonts, images, drawings, and formatting exactly. Only the edited text is re-rendered.
 
-### Content Integrity
+### Fragment-Level Edits
 
-- All text spans present in output (verified via text extraction comparison)
-- All images placed at correct coordinates
-- All vector drawings rendered (lines, rects, paths)
-- No column bleed (overflow:hidden on word spans)
-- No connector doubling (solid-black image filtering)
-- No border stacking (interior-brightness-aware cropping)
+The session records the full block's old/new text for undo, but computes the **smallest changed fragment** for PDF patching. This ensures `page.search_for()` finds the correct text to redact, even on pages with repeated words.
+
+### Overflow Handling
+
+When edited text grows beyond the page boundary, overflow lines are prepended to the top of the next page. The original next-page content is shifted down using a full rawdict rebuild (TextWriter with system fonts). Headers/footers stay at fixed positions.
+
+### System Fonts for Metric Fidelity
+
+When pages must be rebuilt (overflow), the system uses Liberation family fonts (Linux) or Windows core fonts — these are metrically identical to the document's embedded fonts. Text is written via `fitz.TextWriter` + `fitz.Font(fontfile=...)` for exact character positioning.
 
 ---
 
-## 9. What Was Not Needed
+## 5. What Limits Visual Fidelity
 
-The v1 strategy document proposed many tools that turned out unnecessary for the core extraction→render pipeline on digitally-generated PDFs:
-
-| Proposed | Outcome |
-|----------|---------|
-| Docling (layout recognition) | Not needed — PyMuPDF rawdict provides exact coordinates |
-| PaddleOCR / Tesseract | Not needed — native text available in digital PDFs |
-| OpenCV (line detection) | Not needed — PyMuPDF get_drawings() provides vector geometry |
-| NetworkX (diagram graphs) | Not needed — images + stroked paths reproduce diagrams directly |
-| Camelot (table extraction) | Not needed — filled rects + positioned text reproduce tables |
-| Amazon Bedrock | Not needed for extraction/rendering phase |
-| PostgreSQL | Not needed for single-document pipeline |
-| PlantUML / Graphviz | Not needed — original diagram elements rendered as-is |
-
-**Key lesson:** For digitally-generated PDFs, the document already contains all the information needed for faithful reproduction. The hard problem is rendering fidelity (font metrics, stroke calibration, image interpolation), not information extraction.
+| Factor | Impact | Mitigation |
+|--------|--------|-----------|
+| Font glyph shape | Subpixel antialiasing differences | Use metric-compatible fonts (same widths, different outlines) |
+| Rebuilt pages | Text re-rendered with substitute fonts | Only rebuild when overflow requires it; all other pages patched |
+| Table border proximity | Redaction can clip adjacent 0.5pt borders | Shrink redaction rect by 0.5-1pt |
+| TOC leader dots | Dots not regenerated on title edit | Only the title text is replaced; dots/numbers stay |
 
 ---
 
-## 10. Repository Structure
+## 6. Repository Structure
 
 ```
 icd_writer/
-├── pyproject.toml          # Project config, dependencies
-├── Dockerfile              # Containerized build
-├── setup.sh                # Local dev setup
-├── STRATEGY.md             # This document
-├── README.md               # Quick start
-├── SBOM.md                 # Software bill of materials
-├── requirements-lock.txt   # Frozen deps
-├── schemas/                # JSON Schema (auto-generated)
-├── icds/                   # Sample PDFs for testing
+├── docker-compose.yml       Full-stack deployment
+├── docker/                  Dockerfiles (backend, cli, frontend)
+├── frontend/                React app (Vite + TypeScript + Zustand)
 ├── src/
-│   ├── models/             # Pydantic models (Document IR, ICD IR)
-│   ├── ingestion/          # PDF reading, hashing, metadata
-│   ├── classification/     # Page content classification
-│   ├── extraction/         # Text extraction with coordinates
-│   ├── rendering/          # HTML/CSS/WeasyPrint rendering engine
-│   ├── pipeline.py         # Orchestrator
-│   ├── serialization.py    # YAML/JSON import/export
-│   └── cli.py              # Command-line interface
-└── tests/
-    ├── unit/               # Model tests
-    └── integration/        # Full pipeline tests
+│   ├── api/                 FastAPI endpoints + session management
+│   ├── models/              Pydantic models (Document IR, ICD IR)
+│   ├── ingestion/           PDF reading, hashing, metadata
+│   ├── rendering/           Page patching (page_patch.py) + rebuild (page_rebuild.py)
+│   ├── search/              OpenSearch indexing, retrieval, RAG, TBD dashboard
+│   ├── reflow.py            Text reflow + page extension engine
+│   └── pipeline.py          Document processing pipeline
+├── tests/
+│   ├── unit/                Model tests, reflow, search
+│   ├── integration/         Edit → preview → export cycle tests (17 tests)
+│   └── e2e/                 Full API tests
+├── icds/                    Test ICD corpus (Git LFS)
+├── schemas/                 JSON schemas for Document IR
+├── docs/                    Phase requirements, design docs
+├── SBOM.md                  Software Bill of Materials
+├── USER_GUIDE.md            Full user walkthrough
+└── CHANGELOG.md             Release history
 ```

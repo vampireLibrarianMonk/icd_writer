@@ -38,12 +38,27 @@ export function TocEditor() {
     setEditPage(tocData.entries[idx].page_ref);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (editingIdx === null) return;
-    const newEntries = [...tocData.entries];
-    newEntries[editingIdx] = { ...newEntries[editingIdx], title: editTitle, page_ref: editPage };
-    setTocData({ ...tocData, entries: newEntries });
-    // TODO: persist to backend
+    const oldEntry = tocData.entries[editingIdx];
+    // Persist to backend
+    const params = new URLSearchParams();
+    params.set("index", String(editingIdx));
+    if (editTitle !== oldEntry.title) params.set("title", editTitle);
+    if (editPage !== oldEntry.page_ref) params.set("page_ref", editPage);
+
+    try {
+      const res = await fetch(`${API_BASE}/document/page/${currentPage}/toc?${params.toString()}`, { method: "PUT" });
+      if (res.ok) {
+        const newEntries = [...tocData.entries];
+        newEntries[editingIdx] = { ...newEntries[editingIdx], title: editTitle, page_ref: editPage };
+        setTocData({ ...tocData, entries: newEntries });
+        // Trigger page image refresh
+        useEditorStore.setState((s) => ({ refreshTrigger: s.refreshTrigger + 1 }));
+      }
+    } catch (e) {
+      console.error("TOC edit failed:", e);
+    }
     setEditingIdx(null);
   };
 

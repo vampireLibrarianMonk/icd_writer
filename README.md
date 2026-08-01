@@ -1,63 +1,61 @@
 # ICD Writer
 
-**v1.1.0** — NASA Interface Control Document (ICD) editor with semantic search, TBD tracking, and version comparison.
+NASA Interface Control Document (ICD) editor with semantic search, TBD tracking, version comparison, and faithful PDF export.
 
-Extracts text, tables, and structure from PDF ICDs into an editable intermediate representation, provides AI-powered search (RAG) across the corpus, tracks TBD/TBR items cross-document, compares document revisions, and exports edited PDFs.
+Extracts text, tables, and structure from PDF ICDs into an editable intermediate representation, provides AI-powered search (RAG) across the corpus, tracks TBD/TBR items cross-document, compares document revisions, and exports edited PDFs with pixel-perfect fidelity for unedited content.
 
-## Quick Start (Docker)
+## Quick Start
 
 ```bash
 docker compose up -d
 ```
 
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:8000 |
-| OpenSearch | http://localhost:9200 |
-| OpenSearch Dashboards | http://localhost:5601 |
+Wait ~30 seconds for services to become healthy, then open http://localhost:3000.
 
-See [USER_GUIDE.md](USER_GUIDE.md) for a full walkthrough.
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Frontend | http://localhost:3000 | Browser UI |
+| Backend API | http://localhost:8000 | REST endpoints |
+| OpenSearch | http://localhost:9200 | Search engine |
+| OpenSearch Dashboards | http://localhost:5601 | Index inspection |
+
+AWS credentials must be configured (`~/.aws/credentials`) for embedding and RAG features.
+
+See [USER_GUIDE.md](USER_GUIDE.md) for a full walkthrough with examples.
 
 ## Features
 
-- **PDF Extraction** — PyMuPDF extracts text blocks with bounding boxes, fonts, and reading order
-- **Document Editing** — Click-to-edit text blocks with undo/redo, page reflow, and PDF export
-- **Page Extension** — Edits that overflow a page automatically create new pages (paragraphs, lists, tables)
-- **Semantic Search** — Hybrid BM25 + kNN vector search across all indexed ICDs via OpenSearch
-- **RAG (AI Answers)** — Natural language questions answered with citations via AWS Bedrock
-- **TBD Dashboard** — Cross-document TBD/TBR/TBC tracking with status management and correlation
-- **Version Diff** — Compare document revisions, identify requirement changes, AI-summarize diffs
-- **Upload & Index Pipeline** — Upload PDF → extract → embed → index with real-time progress
-- **Document Management** — Add and remove documents from the system via the UI
-- **Dark/Light Mode** — Full theme support across all panels
+- **PDF Extraction** — Text blocks with bounding boxes, fonts, and reading order
+- **Document Editing** — Click-to-edit paragraphs, table cells, and TOC entries with undo/redo
+- **Page Extension** — Edits that overflow a page merge naturally onto the next page
+- **Heading Preservation** — Section headings stay in their original bold font when paragraphs below are edited
+- **Semantic Search** — Hybrid keyword + vector search across all indexed ICDs
+- **RAG (AI Answers)** — Natural language questions answered with inline citations
+- **TBD Dashboard** — Cross-document TBD/TBR tracking with status management and conflict detection
+- **Version Diff** — Compare document revisions, flag requirement changes, AI-summarize diffs
+- **Upload & Index** — Upload PDF → extract → embed → index with real-time progress
+- **Faithful Export** — Unedited pages are byte-identical to source; only edited text is re-rendered
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │  Frontend (React + Vite, served via nginx)            │
-│  localhost:3000                                       │
 └──────────────────────┬───────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────┐
 │  Backend (FastAPI + Uvicorn)                          │
-│  localhost:8000                                       │
-│  • PDF extraction (PyMuPDF)     • Search (OpenSearch) │
-│  • Rendering (WeasyPrint)       • RAG (Bedrock)       │
-│  • Text reflow + page split     • TBD tracking        │
+│  • PDF extraction      • Page patching (export)       │
+│  • Text reflow         • Search (OpenSearch)          │
+│  • TBD tracking        • RAG (Bedrock)                │
 └──────────────────────┬───────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────┐
-│  OpenSearch 2.17 (vector + keyword search)            │
-│  localhost:9200                                       │
+│  OpenSearch (vector + keyword hybrid search)          │
 └──────────────────────────────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────┐
-│  AWS Bedrock (embedding + generation)                 │
-│  • Amazon Titan Embed V2 (1024d vectors)              │
-│  • Cohere Embed English V3                            │
-│  • Amazon Nova Pro (RAG generation)                   │
+│  AWS Bedrock (embedding + generation models)          │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -66,8 +64,8 @@ See [USER_GUIDE.md](USER_GUIDE.md) for a full walkthrough.
 ```bash
 # Python backend
 python -m venv .venv
-.venv/Scripts/activate  # Windows
-source .venv/bin/activate  # Linux/Mac
+.venv/Scripts/activate       # Windows
+source .venv/bin/activate    # Linux/Mac
 pip install -e ".[dev]"
 pip install opensearch-py requests-aws4auth
 uvicorn src.api.app:create_app --factory --port 8000
@@ -84,46 +82,44 @@ docker compose up -d opensearch
 ## Testing
 
 ```bash
-# Run all tests (219 tests)
+# Integration tests (fast, no Docker needed for most)
+python -m pytest tests/integration/ -v
+
+# Full suite
 python -m pytest tests/ -v
 
-# Unit tests only (fast, no services needed)
-python -m pytest tests/unit/ -v
-
-# E2E tests (needs OpenSearch for some)
-python -m pytest tests/e2e/ -v
-```
-
-## CLI
-
-```bash
-python -m src.cli ingest icds/digital/20130010957.pdf
-python -m src.cli search "conflict detection" --mode rrf --rag
-python -m src.cli search-index output/20130010957_document_ir.yaml
-python -m src.cli version-diff icds/digital/IDSS_IDD_RevE.pdf icds/digital/IDSS_IDD_RevF.pdf
-python -m src.cli tbd-dashboard --ingest output/*_document_ir.yaml
+# Page rebuild pipeline specifically
+python -m pytest tests/integration/test_page_rebuild_pipeline.py -v
 ```
 
 ## Project Structure
 
 ```
-docker/                  Dockerfiles (backend, cli, frontend)
-frontend/                React app (Vite + TypeScript)
+docker/                  Dockerfiles (backend, frontend, cli)
+frontend/                React app (TypeScript + Zustand)
 src/
-  api/                   FastAPI endpoints
-  extraction/            PDF text extraction
+  api/                   FastAPI endpoints + session management
   models/                Pydantic models (Document IR, ICD IR)
-  ocr/                   OCR pipeline (Textract, Rekognition, Bedrock)
-  rendering/             PDF regeneration (HTML/CSS + WeasyPrint)
+  rendering/             Page patching + rebuild engine
   search/                OpenSearch indexing, retrieval, RAG, TBD dashboard
-  reflow.py              Text reflow + page extension engine
+  reflow.py              Text reflow + page extension
   pipeline.py            Document processing pipeline
 tests/
-  unit/                  Unit tests (models, reflow, search, extraction)
-  e2e/                   End-to-end API tests
+  unit/                  Model, reflow, search tests
+  integration/           Edit → preview → export cycle tests
+  e2e/                   Full API tests
 icds/                    Test ICD corpus (Git LFS)
-schemas/                 JSON schemas for Document IR and ICD IR
+docs/                    Phase requirements, design documents
 ```
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [USER_GUIDE.md](USER_GUIDE.md) | Step-by-step usage walkthrough |
+| [STRATEGY.md](STRATEGY.md) | Architecture and design decisions |
+| [SBOM.md](SBOM.md) | Software Bill of Materials |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
 
 ## Requirements
 

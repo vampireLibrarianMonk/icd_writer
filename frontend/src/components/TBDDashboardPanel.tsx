@@ -49,6 +49,15 @@ export function TBDDashboard() {
   const [filterDocument, setFilterDocument] = useState<string>("");
   const [availableDocuments, setAvailableDocuments] = useState<string[]>([]);
 
+  // Default the document filter to the currently opened document
+  const { documentPath } = useEditorStore();
+  useEffect(() => {
+    if (documentPath && !filterDocument) {
+      const filename = documentPath.split("/").pop()?.split("\\").pop() || "";
+      if (filename) setFilterDocument(filename);
+    }
+  }, [documentPath]);
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -63,8 +72,12 @@ export function TBDDashboard() {
       setCorrelations(data.correlations || []);
 
       // Build unique document list from all items (unfiltered fetch for dropdown)
-      if (!filterDocument) {
-        const docs = [...new Set((data.items as TBDItemData[]).map((i: TBDItemData) => i.document_title))].sort();
+      if (availableDocuments.length === 0) {
+        // Fetch unfiltered to get all documents for the dropdown
+        const allData = filterDocument || filterStatus || filterType
+          ? await api.getTbdDashboard({})
+          : data;
+        const docs = [...new Set((allData.items as TBDItemData[]).map((i: TBDItemData) => i.document_title))].sort();
         setAvailableDocuments(docs);
       }
     } catch (e) {

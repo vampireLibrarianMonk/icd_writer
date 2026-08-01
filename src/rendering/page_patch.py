@@ -710,18 +710,50 @@ def get_page_edits_from_session(session, document_ir: DocumentIR, page_number: i
         block_id = action.block_id
         old_text = action.data.get("old_text", "")
         new_text = action.data.get("new_text", "")
+        # TOC edits store explicit patch targets
+        patch_old = action.data.get("patch_old", "")
+        patch_new = action.data.get("patch_new", "")
 
         if block_id not in block_edits:
-            block_edits[block_id] = {"old_text": old_text, "new_text": new_text, "block_id": block_id}
+            block_edits[block_id] = {
+                "old_text": old_text, "new_text": new_text,
+                "patch_old": patch_old, "patch_new": patch_new,
+                "block_id": block_id,
+            }
         else:
             block_edits[block_id]["new_text"] = new_text
+            if patch_new:
+                block_edits[block_id]["patch_new"] = patch_new
 
     # Convert full-block edits to specific text fragment diffs
     result = []
     for edit in block_edits.values():
         old_full = edit["old_text"]
         new_full = edit["new_text"]
+        patch_old = edit.get("patch_old", "")
+        patch_new = edit.get("patch_new", "")
+
         if old_full == new_full:
+            continue
+
+        # If explicit patch targets are provided (TOC edits), use them directly
+        if patch_old and patch_new and patch_old != patch_new:
+            result.append({
+                "old_text": patch_old,
+                "new_text": patch_new,
+                "block_id": edit["block_id"],
+            })
+            continue
+
+        # Short edits (< 200 chars) are already targeted — use directly
+        # without fragmentation. This handles inline replacements
+        # where the old_text IS the searchable text on the page.
+        if len(old_full) < 200:
+            result.append({
+                "old_text": old_full,
+                "new_text": new_full,
+                "block_id": edit["block_id"],
+            })
             continue
 
         # Find the specific changed fragment by diffing

@@ -230,51 +230,7 @@ def patch_page(
         if old_text == new_text:
             continue
 
-        # Find the text on the page
-        instances = page.search_for(old_text)
-        if not instances:
-            logger.warning(f"patch_page: '{old_text[:30]}...' not found on page {page_number}")
-            continue
-
-        rect = instances[0]
-
-        # Get font info from the original span
-        font_name, font_size, baseline_y, bold, italic, color = _extract_font_info(page, rect, old_text)
-
-        # Determine alignment: table cell (centered) or paragraph (left-aligned)
-        alignment = _detect_alignment(page, rect, old_text)
-
-        if alignment == "center":
-            # TABLE CELL: redact just the text rect, center the new text
-            page.add_redact_annot(rect, fill=(1, 1, 1))
-            page.apply_redactions()
-
-            original_center_x = (rect.x0 + rect.x1) / 2
-            font_obj = _get_font_object(font_name, bold, italic)
-            if font_obj:
-                new_width = font_obj.text_length(new_text, fontsize=font_size)
-                insert_x = original_center_x - new_width / 2
-                tw = fitz.TextWriter(page.rect)
-                tw.append(fitz.Point(insert_x, baseline_y), new_text, font=font_obj, fontsize=font_size)
-                tw.write_text(page, color=color)
-            else:
-                builtin = _get_pymupdf_fontname(font_name, bold, italic)
-                try:
-                    fallback_font = fitz.Font(fontname=builtin)
-                    new_width = fallback_font.text_length(new_text, fontsize=font_size)
-                    insert_x = original_center_x - new_width / 2
-                except Exception:
-                    insert_x = rect.x0
-                page.insert_text(
-                    fitz.Point(insert_x, baseline_y), new_text,
-                    fontname=builtin, fontsize=font_size, color=color,
-                )
-        else:
-            # PARAGRAPH TEXT: always redact the full line and reinsert
-            # with the replacement applied. This preserves justification
-            # and avoids overflow or gaps.
-            _patch_paragraph_line(page, rect, old_text, new_text,
-                                  font_name, font_size, bold, italic, color)
+        _apply_edit_to_page(page, old_text, new_text)
 
     # Render to PNG
     pix = page.get_pixmap(dpi=150)
@@ -344,46 +300,7 @@ def patch_page_to_pdf(
         if old_text == new_text:
             continue
 
-        instances = page.search_for(old_text)
-        if not instances:
-            logger.warning(f"patch_page_to_pdf: '{old_text[:30]}...' not found on page {page_number}")
-            continue
-
-        rect = instances[0]
-        font_name, font_size, baseline_y, bold, italic, color = _extract_font_info(page, rect, old_text)
-
-        # Determine alignment
-        alignment = _detect_alignment(page, rect, old_text)
-
-        if alignment == "center":
-            # TABLE CELL: redact just the text rect, center the new text
-            page.add_redact_annot(rect, fill=(1, 1, 1))
-            page.apply_redactions()
-
-            original_center_x = (rect.x0 + rect.x1) / 2
-            font_obj = _get_font_object(font_name, bold, italic)
-            if font_obj:
-                new_width = font_obj.text_length(new_text, fontsize=font_size)
-                insert_x = original_center_x - new_width / 2
-                tw = fitz.TextWriter(page.rect)
-                tw.append(fitz.Point(insert_x, baseline_y), new_text, font=font_obj, fontsize=font_size)
-                tw.write_text(page, color=color)
-            else:
-                builtin = _get_pymupdf_fontname(font_name, bold, italic)
-                try:
-                    fallback_font = fitz.Font(fontname=builtin)
-                    new_width = fallback_font.text_length(new_text, fontsize=font_size)
-                    insert_x = original_center_x - new_width / 2
-                except Exception:
-                    insert_x = rect.x0
-                page.insert_text(
-                    fitz.Point(insert_x, baseline_y), new_text,
-                    fontname=builtin, fontsize=font_size, color=color,
-                )
-        else:
-            # PARAGRAPH TEXT: always redact the full line and reinsert
-            _patch_paragraph_line(page, rect, old_text, new_text,
-                                  font_name, font_size, bold, italic, color)
+        _apply_edit_to_page(page, old_text, new_text)
 
     # Save as single-page PDF bytes
     # Create a new doc with just this page
@@ -489,47 +406,59 @@ def _patch_paragraph_line(
         )
 
 
-def _detect_alignment(page: fitz.Page, rect: fitz.Rect, text: str) -> str:
-    """Detect whether text at this position is center-aligned or left-aligned.
+def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> None:
+    """Apply a single text edit to a PDF page.
 
-    Checks other spans on nearby lines (same column region) to determine
-    if texts share a common center-x (table column) or have varying x0
-    positions (paragraph flow).
+    Uses the same logic as the page image renderer:
+    - Finds the old text on the page
+    - Detects alignment (table center vs paragraph)
+    - For paragraphs: reflows the entire paragraph block
+    - For tables: centers the new text in the cell
 
-    Returns:
-        "center" for table cells, "left" for inline paragraph text.
+    This is the shared implementation used by both the page image endpoint
+    and the export endpoint.
     """
-    raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
-    target_center = (rect.x0 + rect.x1) / 2
-    target_y = (rect.y0 + rect.y1) / 2
+    if old_text == new_text:
+        return
 
-    # Collect centers of other spans in a vertical band (same column, ±50pt vertically)
-    nearby_centers = []
-    for block in raw.get("blocks", []):
-        if block.get("type") != 0:
-            continue
-        for line in block.get("lines", []):
-            for span in line.get("spans", []):
-                bbox = span["bbox"]
-                span_center_y = (bbox[1] + bbox[3]) / 2
-                span_center_x = (bbox[0] + bbox[2]) / 2
-                # Same vertical region (±50pt) and similar horizontal zone (±80pt of our center)
-                if (abs(span_center_y - target_y) < 50
-                        and abs(span_center_x - target_center) < 80
-                        and bbox != (rect.x0, rect.y0, rect.x1, rect.y1)):
-                    nearby_centers.append(span_center_x)
+    instances = page.search_for(old_text)
+    if not instances:
+        logger.warning(f"_apply_edit_to_page: '{old_text[:30]}...' not found")
+        return
 
-    if not nearby_centers:
-        return "left"
+    rect = instances[0]
+    font_name, font_size, baseline_y, bold, italic, color = _extract_font_info(page, rect, old_text)
+    alignment = _detect_alignment(page, rect, old_text)
 
-    # Count how many nearby spans share our center (within 5pt)
-    matching = sum(1 for c in nearby_centers if abs(c - target_center) < 5)
+    if alignment == "center":
+        # TABLE CELL
+        page.add_redact_annot(rect, fill=(1, 1, 1))
+        page.apply_redactions()
 
-    # If 2+ neighbors share the same center → table column (center-aligned)
-    if matching >= 2:
-        return "center"
-
-    return "left"
+        original_center_x = (rect.x0 + rect.x1) / 2
+        font_obj = _get_font_object(font_name, bold, italic)
+        if font_obj:
+            new_width = font_obj.text_length(new_text, fontsize=font_size)
+            insert_x = original_center_x - new_width / 2
+            tw = fitz.TextWriter(page.rect)
+            tw.append(fitz.Point(insert_x, baseline_y), new_text, font=font_obj, fontsize=font_size)
+            tw.write_text(page, color=color)
+        else:
+            builtin = _get_pymupdf_fontname(font_name, bold, italic)
+            try:
+                fb = fitz.Font(fontname=builtin)
+                new_width = fb.text_length(new_text, fontsize=font_size)
+                insert_x = original_center_x - new_width / 2
+            except Exception:
+                insert_x = rect.x0
+            page.insert_text(
+                fitz.Point(insert_x, baseline_y), new_text,
+                fontname=builtin, fontsize=font_size, color=color,
+            )
+    else:
+        # PARAGRAPH: full block reflow
+        _patch_paragraph_line(page, rect, old_text, new_text,
+                              font_name, font_size, bold, italic, color)
 
 
 def _extract_font_info(page: fitz.Page, rect: fitz.Rect, text: str) -> tuple[str, float, float, bool, bool, tuple]:

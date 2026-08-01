@@ -1652,59 +1652,44 @@ def create_app() -> FastAPI:
             if edits:
                 pages_with_edits[page_num] = edits
 
-        # Open source and apply patches
+        # Open source and apply patches using the same logic as page image rendering
+        from src.rendering.page_patch import _apply_edit_to_page
         doc = fitz.open(str(source_path))
+        source_page_count = len(doc)
+
         for page_num, edits in pages_with_edits.items():
-            if page_num > len(doc):
+            if page_num > source_page_count:
                 continue
             page = doc[page_num - 1]
             for edit in edits:
-                old_text = edit["old_text"]
-                new_text = edit["new_text"]
-                if old_text == new_text:
-                    continue
+                _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
 
-                instances = page.search_for(old_text)
-                if not instances:
-                    continue
+        # Add new pages created by page splits (exist in IR but not in source)
+        if doc_ir.page_count > source_page_count:
+            from src.rendering.ir_renderer import _ir_blocks_to_elements
+            from src.rendering.renderer import render_page_to_html
 
-                rect = instances[0]
-                from src.rendering.page_patch import _extract_font_info, _get_font_object, _get_pymupdf_fontname
-                font_name, font_size, baseline_y, bold, italic, color = _extract_font_info(page, rect, old_text)
-
-                page.add_redact_annot(rect, fill=(1, 1, 1))
-                page.apply_redactions()
-
-                # Determine alignment and insert
-                from src.rendering.page_patch import _detect_alignment
-                alignment = _detect_alignment(page, rect, old_text)
-                original_center_x = (rect.x0 + rect.x1) / 2
-
-                font_obj = _get_font_object(font_name, bold, italic)
-                if font_obj:
-                    new_width = font_obj.text_length(new_text, fontsize=font_size)
-                    if alignment == "center":
-                        insert_x = original_center_x - new_width / 2
-                    else:
-                        insert_x = rect.x0
-                    tw = fitz.TextWriter(page.rect)
-                    tw.append(fitz.Point(insert_x, baseline_y), new_text, font=font_obj, fontsize=font_size)
-                    tw.write_text(page, color=color)
-                else:
-                    builtin = _get_pymupdf_fontname(font_name, bold, italic)
-                    try:
-                        fallback_font = fitz.Font(fontname=builtin)
-                        new_width = fallback_font.text_length(new_text, fontsize=font_size)
-                        if alignment == "center":
-                            insert_x = original_center_x - new_width / 2
-                        else:
-                            insert_x = rect.x0
-                    except Exception:
-                        insert_x = rect.x0
-                    page.insert_text(
-                        fitz.Point(insert_x, baseline_y), new_text,
-                        fontname=builtin, fontsize=font_size, color=color,
-                    )
+            for page_idx in range(source_page_count, doc_ir.page_count):
+                page_info = doc_ir.pages[page_idx]
+                try:
+                    from weasyprint import HTML
+                    elements = _ir_blocks_to_elements(page_info)
+                    html = render_page_to_html(page_info.width_pt, page_info.height_pt, elements)
+                    pdf_bytes = HTML(string=html).write_pdf()
+                    new_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                    doc.insert_pdf(new_doc)
+                    new_doc.close()
+                except Exception:
+                    # If WeasyPrint unavailable, create a blank page with text
+                    new_page = doc.new_page(width=page_info.width_pt, height=page_info.height_pt)
+                    y = 72.0
+                    for block in page_info.text_blocks:
+                        new_page.insert_text(
+                            fitz.Point(block.bbox.x0, y + 12),
+                            block.text_verbatim,
+                            fontname="tiro", fontsize=10, color=(0, 0, 0),
+                        )
+                        y += 14
 
         doc.save(str(output_path))
         doc.close()

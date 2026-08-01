@@ -406,10 +406,12 @@ def _patch_paragraph_line(
     page_height = page.rect.height
     content_bottom_y = page_height - 72  # Don't insert below this
 
+    overflow_lines = []
     for i, line_text in enumerate(wrapped_lines):
         y = first_baseline_y + i * line_height
         if y > content_bottom_y:
-            break  # Stop — remaining lines go on the overflow page
+            overflow_lines = wrapped_lines[i:]
+            break
         page.insert_text(
             fitz.Point(block_rect.x0, y),
             line_text,
@@ -418,8 +420,10 @@ def _patch_paragraph_line(
             color=color,
         )
 
+    return overflow_lines
 
-def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> None:
+
+def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[str]:
     """Apply a single text edit to a PDF page.
 
     Uses the same logic as the page image renderer:
@@ -428,16 +432,16 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> None:
     - For paragraphs: reflows the entire paragraph block
     - For tables: centers the new text in the cell
 
-    This is the shared implementation used by both the page image endpoint
-    and the export endpoint.
+    Returns:
+        List of overflow lines that didn't fit on the page (empty if all fit).
     """
     if old_text == new_text:
-        return
+        return []
 
     instances = page.search_for(old_text)
     if not instances:
         logger.warning(f"_apply_edit_to_page: '{old_text[:30]}...' not found")
-        return
+        return []
 
     rect = instances[0]
     font_name, font_size, baseline_y, bold, italic, color = _extract_font_info(page, rect, old_text)
@@ -468,9 +472,10 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> None:
                 fitz.Point(insert_x, baseline_y), new_text,
                 fontname=builtin, fontsize=font_size, color=color,
             )
+        return []
     else:
-        # PARAGRAPH: full block reflow
-        _patch_paragraph_line(page, rect, old_text, new_text,
+        # PARAGRAPH: full block reflow — returns overflow lines
+        return _patch_paragraph_line(page, rect, old_text, new_text,
                               font_name, font_size, bold, italic, color)
 
 

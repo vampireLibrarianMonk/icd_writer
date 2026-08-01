@@ -920,13 +920,16 @@ def create_app() -> FastAPI:
         source_doc = fitz.open(str(source_path))
         source_page_count = len(source_doc)
 
-        # Apply edits to source pages
+        # Apply edits to source pages and collect overflow lines
+        overflow_lines_all: list[str] = []
         for page_num, edits in pages_with_edits.items():
             if page_num > source_page_count:
                 continue
             page = source_doc[page_num - 1]
             for edit in edits:
-                _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
+                overflow = _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
+                if overflow:
+                    overflow_lines_all.extend(overflow)
 
         # If overflow occurred, redact moved content from the source page
         # (blocks that the IR moved to the overflow page still exist on the source)
@@ -975,20 +978,31 @@ def create_app() -> FastAPI:
             for i in range(num_new_pages):
                 ir_idx = insert_after + i
                 page_info = doc_ir.pages[ir_idx]
-                # Create overflow page — skip blocks whose content was already
-                # rendered on the edited page (they were partially placed there by the patch)
                 new_page = output_doc.new_page(
                     width=page_info.width_pt, height=page_info.height_pt
                 )
                 y = 72.0
-                # Get the edit's new_text to identify which block to skip
+
+                # First, render the overflow lines from page 7 (continuation text)
+                if overflow_lines_all:
+                    builtin = "tiro"
+                    for line_text in overflow_lines_all:
+                        new_page.insert_text(
+                            fitz.Point(90, y + 12),
+                            line_text,
+                            fontname=builtin, fontsize=12, color=(0, 0, 0),
+                        )
+                        y += 14
+                    overflow_lines_all = []  # Only render once
+                    y += 14  # Gap after overflow text
+
+                # Then render non-edited blocks from the IR overflow page
                 edited_texts = set()
                 for pg_edits in pages_with_edits.values():
                     for edit in pg_edits:
                         edited_texts.add(" ".join(edit["new_text"].split())[:40])
 
                 for block in page_info.text_blocks:
-                    # Skip blocks that contain the edited text (already on previous page)
                     block_start = " ".join(block.text_verbatim.split())[:40]
                     if block_start in edited_texts:
                         continue

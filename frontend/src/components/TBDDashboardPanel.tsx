@@ -52,7 +52,7 @@ export function TBDDashboard() {
   // Default the document filter to the currently opened document
   const { documentPath } = useEditorStore();
   useEffect(() => {
-    if (documentPath && !filterDocument) {
+    if (documentPath) {
       const filename = documentPath.split("/").pop()?.split("\\").pop() || "";
       if (filename) setFilterDocument(filename);
     }

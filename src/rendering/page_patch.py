@@ -707,29 +707,17 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
         page.add_redact_annot(redact_rect, fill=(1, 1, 1))
         page.apply_redactions()
 
-        # Insert new text with the SAME font/size/color as the original span.
-        # Register the system font with insert_font, then use insert_text.
-        font_path = _find_system_font(span_font, span_bold, span_italic)
-        if font_path:
-            # Register the font on the page and use its internal name
-            registered_name = "F_inline"
-            page.insert_font(fontfile=font_path, fontname=registered_name)
-            page.insert_text(
-                fitz.Point(insert_x, span_baseline),
-                new_text,
-                fontname=registered_name,
-                fontsize=span_size,
-                color=span_color,
-            )
-        else:
-            builtin = _get_pymupdf_fontname(span_font, span_bold, span_italic)
-            page.insert_text(
-                fitz.Point(insert_x, span_baseline),
-                new_text,
-                fontname=builtin,
-                fontsize=span_size,
-                color=span_color,
-            )
+        # Insert new text using a PDF base-14 built-in font (universally available
+        # in all PDF viewers without embedding). This avoids the "font not found"
+        # issue that occurs when referencing system fonts like Liberation Serif.
+        builtin = _get_pymupdf_fontname(span_font, span_bold, span_italic)
+        page.insert_text(
+            fitz.Point(insert_x, span_baseline),
+            new_text,
+            fontname=builtin,
+            fontsize=span_size,
+            color=span_color,
+        )
         return []
     else:
         # PARAGRAPH: full block reflow — returns overflow lines

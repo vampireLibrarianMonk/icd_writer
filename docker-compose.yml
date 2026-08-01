@@ -53,6 +53,7 @@ services:
     volumes:
       - ./output:/app/output
       - ./icds:/app/icds
+      - ./src:/app/src
       - ~/.aws:/root/.aws:ro
     depends_on:
       opensearch:

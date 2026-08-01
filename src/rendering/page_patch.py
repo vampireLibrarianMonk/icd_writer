@@ -326,11 +326,14 @@ def _patch_paragraph_line(
     page: fitz.Page, rect: fitz.Rect, old_text: str, new_text: str,
     font_name: str, font_size: float, bold: bool, italic: bool, color: tuple,
 ) -> None:
-    """Patch paragraph text by reflowing the entire paragraph block.
+    """Patch paragraph text by reflowing the paragraph portion of a block.
 
-    Finds the PDF block containing the old text, redacts it, and retypesets
-    the full paragraph with the edit applied using insert_textbox with justify.
-    This produces natural word-wrap and proper justification.
+    Finds the PDF block containing the old text. If the block starts with
+    heading lines (bold/sans-serif font), those are preserved at their original
+    positions. Only the paragraph portion is redacted and retypeset.
+
+    This ensures section headings like "4. Electrical Interface" are never
+    destroyed by paragraph edits below them.
     """
     raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
     target_block = None
@@ -347,7 +350,6 @@ def _patch_paragraph_line(
                 line_text += "".join(c["c"] for c in chars)
             lines_text.append(line_text.rstrip())
         block_text = " ".join(lines_text)
-        # Normalize: replace newlines with spaces for matching (IR stores \n, block joins with space)
         old_text_normalized = " ".join(old_text.split())
         block_text_normalized = " ".join(block_text.split())
         if old_text_normalized in block_text_normalized:
@@ -366,23 +368,160 @@ def _patch_paragraph_line(
         )
         return
 
+    # --- Separate heading lines from paragraph lines ---
+    # A "heading line" is a line whose first span is bold or in a sans-serif font
+    # (Arial, Helvetica) while the block also contains serif text.
+    block_lines = target_block["lines"]
+    heading_line_count = 0
+
+    for line in block_lines:
+        spans = line.get("spans", [])
+        if not spans:
+            break
+        first_span = spans[0]
+        span_font = first_span.get("font", "").lower()
+        span_flags = first_span.get("flags", 0)
+        is_bold = bool(span_flags & (1 << 4)) or "bold" in span_font
+        is_sans = "arial" in span_font or "helvetica" in span_font
+
+        if is_bold or is_sans:
+            heading_line_count += 1
+        else:
+            break  # First non-heading line — everything after is paragraph
+
     # Get block geometry
     block_bbox = target_block["bbox"]
     block_rect = fitz.Rect(block_bbox)
 
+    if heading_line_count > 0 and heading_line_count < len(block_lines):
+        # Block has heading lines followed by paragraph lines.
+        # Only redact the PARAGRAPH portion (below the heading).
+        heading_last_line = block_lines[heading_line_count - 1]
+        heading_bottom_y = max(
+            span["bbox"][3] for span in heading_last_line.get("spans", [])
+        )
+
+        # Paragraph rect: from below the heading to the bottom of the block
+        para_rect = fitz.Rect(
+            block_bbox[0],
+            heading_bottom_y,
+            block_bbox[2],
+            block_bbox[3],
+        )
+
+        # Get paragraph style from first paragraph span
+        para_first_line = block_lines[heading_line_count]
+        para_first_span = para_first_line["spans"][0]
+        para_font_name = para_first_span.get("font", font_name)
+        para_font_size = para_first_span.get("size", font_size)
+        para_flags = para_first_span.get("flags", 0)
+        para_bold = bool(para_flags & (1 << 4)) or "bold" in para_font_name.lower()
+        para_italic = bool(para_flags & (1 << 1)) or "italic" in para_font_name.lower()
+        para_origin = para_first_span.get("origin", (para_rect.x0, para_rect.y0 + para_font_size))
+
+        # Extract color from paragraph span
+        para_color_int = para_first_span.get("color", 0)
+        pr = ((para_color_int >> 16) & 0xFF) / 255.0
+        pg = ((para_color_int >> 8) & 0xFF) / 255.0
+        pb = (para_color_int & 0xFF) / 255.0
+        para_color = (pr, pg, pb)
+
+        # Compute paragraph line height
+        para_lines_in_block = block_lines[heading_line_count:]
+        if len(para_lines_in_block) >= 2:
+            y1 = para_lines_in_block[0]["spans"][0].get("origin", (0, 0))[1]
+            y2 = para_lines_in_block[1]["spans"][0].get("origin", (0, 0))[1]
+            para_line_height = y2 - y1
+        else:
+            para_line_height = para_font_size * 1.2
+
+        # Redact ONLY the paragraph portion (heading stays intact)
+        page.add_redact_annot(para_rect, fill=(1, 1, 1))
+        page.apply_redactions()
+
+        # Reconstruct the full paragraph text from the original rawdict lines,
+        # then apply the old→new fragment replacement within it.
+        # This ensures we don't lose text that was OUTSIDE the changed fragment.
+        original_para_parts = []
+        for line in block_lines[heading_line_count:]:
+            line_text = ""
+            for span in line.get("spans", []):
+                chars = span.get("chars", [])
+                line_text += "".join(c["c"] for c in chars)
+            original_para_parts.append(line_text.rstrip())
+        original_para_text = " ".join(original_para_parts)
+
+        # Apply the fragment replacement within the full paragraph
+        old_text_normalized = " ".join(old_text.split())
+        new_text_normalized = " ".join(new_text.split())
+        original_para_normalized = " ".join(original_para_text.split())
+
+        # Check if the new_text includes the heading (full block replacement)
+        heading_text_parts = []
+        for line in block_lines[:heading_line_count]:
+            line_text = ""
+            for span in line.get("spans", []):
+                chars = span.get("chars", [])
+                line_text += "".join(c["c"] for c in chars)
+            heading_text_parts.append(line_text.strip())
+        heading_normalized = " ".join(" ".join(heading_text_parts).split())
+
+        if new_text_normalized.startswith(heading_normalized):
+            # Full block replacement — new_text includes heading, strip it
+            para_new_text = new_text_normalized[len(heading_normalized):].strip()
+        elif old_text_normalized in original_para_normalized:
+            # Fragment replacement within the paragraph
+            para_new_text = original_para_normalized.replace(
+                old_text_normalized, new_text_normalized, 1
+            )
+        else:
+            # Fallback: use new_text as-is
+            para_new_text = new_text_normalized
+
+        # Word-wrap and insert the paragraph text
+        builtin = _get_pymupdf_fontname(para_font_name, para_bold, para_italic)
+        content_width = para_rect.width
+
+        try:
+            measure_font = fitz.Font(fontname=builtin)
+        except Exception:
+            measure_font = None
+
+        wrapped_lines = _word_wrap(para_new_text.strip(), content_width, measure_font, para_font_size)
+
+        page_height = page.rect.height
+        content_bottom_y = page_height - 72
+        first_para_y = para_origin[1]
+
+        overflow_lines = []
+        for i, line_text in enumerate(wrapped_lines):
+            y = first_para_y + i * para_line_height
+            if y > content_bottom_y:
+                overflow_lines = wrapped_lines[i:]
+                break
+            page.insert_text(
+                fitz.Point(para_rect.x0, y),
+                line_text,
+                fontname=builtin,
+                fontsize=para_font_size,
+                color=para_color,
+            )
+
+        return overflow_lines
+
+    # --- No heading separation needed: reflow the entire block ---
     # Apply the text replacement to the full block text
-    # Use normalized text (spaces instead of newlines) for the replacement
     block_text_spaces = " ".join(target_block_text.split())
     old_text_spaces = " ".join(old_text.split())
     new_text_spaces = " ".join(new_text.split())
     new_block_text = block_text_spaces.replace(old_text_spaces, new_text_spaces, 1)
 
     # Compute line height from original
-    num_lines = len(target_block["lines"])
+    num_lines = len(block_lines)
     line_height = block_rect.height / num_lines if num_lines > 0 else font_size * 1.2
 
     # Get the first line's baseline for correct vertical positioning
-    first_origin = target_block["lines"][0]["spans"][0].get("origin", (0, 0))
+    first_origin = block_lines[0]["spans"][0].get("origin", (0, 0))
     first_baseline_y = first_origin[1] if first_origin else block_rect.y0 + font_size
 
     # Redact the entire paragraph block
@@ -398,13 +537,10 @@ def _patch_paragraph_line(
     except Exception:
         measure_font = None
 
-    # Word-wrap the new text to fit within content_width
     wrapped_lines = _word_wrap(new_block_text.strip(), content_width, measure_font, font_size)
 
-    # Insert each line at the correct y-position (matching original line spacing)
-    # Stop before the footer zone (bottom 72pt of page)
     page_height = page.rect.height
-    content_bottom_y = page_height - 72  # Don't insert below this
+    content_bottom_y = page_height - 72
 
     overflow_lines = []
     for i, line_text in enumerate(wrapped_lines):
@@ -448,8 +584,16 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str) -> list[s
     alignment = _detect_alignment(page, rect, old_text)
 
     if alignment == "center":
-        # TABLE CELL
-        page.add_redact_annot(rect, fill=(1, 1, 1))
+        # TABLE CELL — shrink the redaction rect slightly to avoid
+        # covering the cell border lines (drawn as thin filled rectangles
+        # just below/beside the text bbox).
+        redact_rect = fitz.Rect(
+            rect.x0 + 0.5,
+            rect.y0 + 0.5,
+            rect.x1 - 0.5,
+            rect.y1 - 1.0,  # extra margin at bottom where border sits
+        )
+        page.add_redact_annot(redact_rect, fill=(1, 1, 1))
         page.apply_redactions()
 
         original_center_x = (rect.x0 + rect.x1) / 2

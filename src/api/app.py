@@ -788,7 +788,9 @@ def create_app() -> FastAPI:
     def get_page_image(page_number: int):
         """Render a page as PNG image for the viewer.
 
-        If the page has been edited, re-renders from Document IR via WeasyPrint.
+        If the page has been edited, patches it with edits applied.
+        If a previous page's edit overflows onto this page, rebuilds with
+        overflow prepended (shifting original content down).
         Otherwise serves the original PDF page directly (fast).
         """
         import fitz
@@ -816,16 +818,71 @@ def create_app() -> FastAPI:
             if " ".join(source_text.split()) != " ".join(ir_text.split()):
                 page_edited = True
 
-        if page_edited:
-            # Rebuild the page from rawdict with edits applied
+        # Check if the PREVIOUS page has edits that overflow onto this page
+        overflow_from_prev = []
+        if doc_ir and page_number > 1:
+            from src.rendering.page_patch import (
+                get_page_edits_from_session,
+                _apply_edit_to_page,
+            )
+            prev_page_num = page_number - 1
+            prev_edits = get_page_edits_from_session(session, doc_ir, prev_page_num)
+            if prev_edits:
+                # Apply edits to a copy of the previous page to detect overflow
+                prev_page = doc[prev_page_num - 1]
+                for edit in prev_edits:
+                    overflow = _apply_edit_to_page(prev_page, edit["old_text"], edit["new_text"])
+                    if overflow:
+                        overflow_from_prev.extend(overflow)
+
+        if overflow_from_prev:
+            # Rebuild this page with overflow from previous page prepended
             doc.close()
             try:
-                from src.rendering.page_patch import get_page_edits_from_session
                 from src.rendering.page_rebuild import rebuild_page_with_edits
+
+                # Build overflow span dicts
+                overflow_spans = []
+                for line_text in overflow_from_prev:
+                    overflow_spans.append({
+                        "text": line_text,
+                        "font": "TimesNewRoman",
+                        "size": 12.0,
+                        "flags": 0,
+                        "color": 0,
+                        "line_height": 14.16,
+                        "x": 90.0,
+                    })
+
+                # Also get any edits for THIS page
+                this_page_edits = get_page_edits_from_session(session, doc_ir, page_number)
+                img_bytes = rebuild_page_with_edits(
+                    source_path, page_number,
+                    edits=this_page_edits or [],
+                    prepend_overflow=overflow_spans,
+                )
+                return Response(content=img_bytes, media_type="image/png",
+                               headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                doc = fitz.open(source_path)
+                page = doc[page_number - 1]
+                pix = page.get_pixmap(dpi=150)
+                img_bytes = pix.tobytes("png")
+                doc.close()
+                return Response(content=img_bytes, media_type="image/png",
+                               headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+        elif page_edited:
+            # Patch the source page in-place (redact old text, insert new)
+            # This preserves all unedited content pixel-perfectly
+            doc.close()
+            try:
+                from src.rendering.page_patch import get_page_edits_from_session, patch_page
 
                 edits = get_page_edits_from_session(state["session"], doc_ir, page_number)
                 if edits:
-                    img_bytes = rebuild_page_with_edits(source_path, page_number, edits)
+                    img_bytes = patch_page(source_path, page_number, edits)
                 else:
                     doc = fitz.open(source_path)
                     page = doc[page_number - 1]
@@ -835,7 +892,7 @@ def create_app() -> FastAPI:
 
                 return Response(content=img_bytes, media_type="image/png",
                                headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
-            except Exception as e:
+            except Exception:
                 # Fallback to source on patch failure
                 import traceback
                 traceback.print_exc()
@@ -887,19 +944,22 @@ def create_app() -> FastAPI:
     def export_and_download(filename: str = "exported.pdf"):
         """Export the document and immediately return it as a download.
 
-        Uses the same 1:1 page patching as POST /document/export.
+        Uses targeted page patching (redact + insert) to preserve pixel-perfect
+        fidelity for all unedited content. Only the edited text is reflowed.
         """
         from fastapi.responses import FileResponse
 
-        # Trigger the export (reuses the POST /document/export logic)
         doc_ir = state["document_ir"]
         session = state["session"]
         if not doc_ir or not session:
             raise HTTPException(404, "No document loaded")
 
         from src.output_dir import OutputDir
-        from src.rendering.page_patch import get_page_edits_from_session
-        from src.rendering.page_rebuild import rebuild_page_to_doc
+        from src.rendering.page_patch import (
+            get_page_edits_from_session,
+            _apply_edit_to_page,
+            _get_pymupdf_fontname,
+        )
         import fitz
 
         out = OutputDir(document_name=Path(session.document_path).stem)
@@ -915,39 +975,56 @@ def create_app() -> FastAPI:
             if edits:
                 pages_with_edits[page_num] = edits
 
-        # Build output PDF: for each page, either copy from source or rebuild
+        # Open source and apply edits in-place (preserves all unedited content)
         source_doc = fitz.open(str(source_path))
-        source_page_count = len(source_doc)
-        output_doc = fitz.open()
-        all_overflow_lines: list[str] = []
+        all_overflow: list[str] = []
 
-        for page_idx in range(source_page_count):
-            page_num = page_idx + 1
-            if page_num in pages_with_edits:
-                # Rebuild this page with edits applied
-                rebuilt, overflow = rebuild_page_to_doc(source_doc, page_num, pages_with_edits[page_num])
-                output_doc.insert_pdf(rebuilt)
-                rebuilt.close()
+        for page_num, edits in pages_with_edits.items():
+            if page_num > len(source_doc):
+                continue
+            page = source_doc[page_num - 1]
+            for edit in edits:
+                overflow = _apply_edit_to_page(page, edit["old_text"], edit["new_text"])
                 if overflow:
-                    all_overflow_lines.extend(overflow)
-                    # Insert overflow page immediately after the edited page
-                    page_info = doc_ir.pages[0]
-                    new_page = output_doc.new_page(width=page_info.width_pt, height=page_info.height_pt)
-                    y = 72.0
-                    for line_text in all_overflow_lines:
-                        new_page.insert_text(
-                            fitz.Point(90, y + 12),
-                            line_text,
-                            fontname="tiro", fontsize=12, color=(0, 0, 0),
-                        )
-                        y += 14
-                    all_overflow_lines = []
-            else:
-                # Copy unchanged page from source
-                output_doc.insert_pdf(source_doc, from_page=page_idx, to_page=page_idx)
+                    all_overflow.extend(overflow)
 
-        output_doc.save(str(output_path))
-        output_doc.close()
+        # Handle overflow: merge overflow text onto the TOP of the next page,
+        # pushing existing content down. This produces natural flow where
+        # Section 5 appears right below the end of Section 4's overflow.
+        if all_overflow and pages_with_edits:
+            last_edited_page = max(pages_with_edits.keys())
+            next_page_idx = last_edited_page  # 0-based index of the next page
+
+            if next_page_idx < len(source_doc):
+                from src.rendering.page_rebuild import rebuild_page_to_doc
+
+                # Build overflow span dicts for the rebuild function
+                overflow_spans = []
+                for line_text in all_overflow:
+                    overflow_spans.append({
+                        "text": line_text,
+                        "font": "TimesNewRoman",
+                        "size": 12.0,
+                        "flags": 0,
+                        "color": 0,
+                        "line_height": 14.16,
+                        "x": 90.0,
+                    })
+
+                # Rebuild the next page with overflow prepended
+                # (shifts all original content down to make room)
+                rebuilt_doc, further_overflow = rebuild_page_to_doc(
+                    source_doc, last_edited_page + 1,
+                    edits=[],  # no edits on this page
+                    prepend_overflow=overflow_spans,
+                )
+
+                # Replace the next page in the source doc with the rebuilt version
+                source_doc.delete_page(next_page_idx)
+                source_doc.insert_pdf(rebuilt_doc, start_at=next_page_idx)
+                rebuilt_doc.close()
+
+        source_doc.save(str(output_path))
         source_doc.close()
 
         return FileResponse(
@@ -956,10 +1033,6 @@ def create_app() -> FastAPI:
             filename=filename,
             headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
         )
-
-        if not session or not session.document_path:
-            raise HTTPException(404, "No document loaded")
-        return analyze_page_content(session.document_path, page_number)
 
     @app.get("/document/page/{page_number}/table-zones")
     def get_table_zones(page_number: int):
@@ -1495,18 +1568,8 @@ def create_app() -> FastAPI:
             ],
         }
 
-
-        page = doc[page_number - 1]
-        pix = page.get_pixmap(dpi=150)
-        img_bytes = pix.tobytes("png")
-        doc.close()
-
-        return Response(content=img_bytes, media_type="image/png")
-
     # ─── Editing ───────────────────────────────────────────────────
 
-
-    
     @app.get("/document/tbd-items")
     def get_tbd_items():
         """Return all TBD/TBR/TBC/TBS items in the document."""

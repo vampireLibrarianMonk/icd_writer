@@ -6,6 +6,40 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.2.1] — 2026-08-01
+
+### Fixed
+- **Export pipeline**: switched from broken full-page rawdict rebuild to targeted patch
+  approach (redact+insert). Unedited content now stays pixel-perfect in exports.
+- **Heading preservation**: section headings (e.g., "4. Electrical Interface") in bold/
+  sans-serif font are no longer destroyed when the paragraph below them is edited.
+  The heading stays in its original font at its original position.
+- **Overflow merging**: when edited text overflows page N, the overflow now appears at
+  the top of page N+1 with existing content pushed down (not superimposed on top of it).
+  Total page count stays the same when overflow fits on the next page.
+- **Page 8 preview**: the document viewer now detects overflow from the previous page
+  and rebuilds the next page's preview image with overflow content prepended.
+- **Table cell border preservation**: the redaction rect for table cell edits is now
+  shrunk by 0.5–1pt to avoid whiting out the thin filled rectangles that form cell borders.
+- **Frontend image refresh**: `applyEdit` and `redo` now increment `refreshTrigger`,
+  ensuring the page image reloads in the viewer after every edit/undo/redo action.
+
+### Changed
+- Export-download route uses `_apply_edit_to_page` directly on the source document
+  (same approach as `POST /document/export`), no more page_rebuild for export.
+- `page_rebuild.py` rewritten with system fonts (TextWriter + Liberation/Windows TTF),
+  heading/paragraph splitting, and overflow span propagation — used only for overflow
+  page reconstruction (prepending overflow onto the next page).
+- Docker compose mounts `./src:/app/src` for live code reloading during development.
+- `editorStore.ts` redo action now fetches undo/redo availability from backend.
+
+### Added
+- Integration test suite: `tests/integration/test_page_rebuild_pipeline.py` (13 tests)
+  covering page preview, heading preservation, overflow handling, undo/redo cycle,
+  and export consistency. Runs in 3.6s using local TestClient (no Docker needed).
+
+---
+
 ## [1.2.0] — 2026-07-31
 
 ### Added

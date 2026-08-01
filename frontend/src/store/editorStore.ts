@@ -103,6 +103,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedBlock: pageData.blocks.find((b) => b.id === selectedBlock.id) || null,
       canUndo: actions.undo_available,
       canRedo: actions.redo_available,
+      refreshTrigger: state.refreshTrigger + 1,
     }));
   },
 
@@ -139,11 +140,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     await api.redo();
     const { currentPage } = get();
     const pageData = await api.getPage(currentPage);
+    const actions = await api.getActions();
     set((state) => ({
       pageData,
       editCount: state.editCount + 1,
       selectedBlock: null,
       editText: "",
+      refreshTrigger: state.refreshTrigger + 1,
+      canUndo: actions.undo_available,
+      canRedo: actions.redo_available,
     }));
   },
 }));

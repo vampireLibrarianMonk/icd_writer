@@ -597,24 +597,9 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str, inline: b
     font_name, font_size, baseline_y, bold, italic, color = _extract_font_info(page, rect, old_text)
     alignment = _detect_alignment(page, rect, old_text)
 
-    # INLINE mode: simple redact + insert (for table cells and similar)
-    if inline:
-        redact_rect = fitz.Rect(
-            rect.x0 + 0.5, rect.y0 + 0.5,
-            rect.x1 - 0.5, rect.y1 - 1.0,
-        )
-        page.add_redact_annot(redact_rect, fill=(1, 1, 1))
-        page.apply_redactions()
-        builtin = _get_pymupdf_fontname(font_name, bold, italic)
-        page.insert_text(
-            fitz.Point(rect.x0, baseline_y), new_text,
-            fontname=builtin, fontsize=font_size, color=color,
-        )
-        return []
-
     # Check if this is a TOC entry edit (short text + dots span on the page)
     is_toc_edit = False
-    if len(old_text) < 120 and "\n" not in old_text:
+    if len(old_text) < 120 and "\n" not in old_text and not inline:
         raw_check = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
         search_word = old_text.split()[-1]
         for block in raw_check.get("blocks", []):
@@ -631,6 +616,22 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str, inline: b
                     break
             if is_toc_edit:
                 break
+
+    # INLINE mode: simple redact + insert (for table cells and short replacements)
+    # Skips paragraph reflow. TOC edits go through their own dedicated path below.
+    if not is_toc_edit and (inline or (len(old_text) < 80 and "\n" not in old_text)):
+        redact_rect = fitz.Rect(
+            rect.x0 + 0.5, rect.y0 + 0.5,
+            rect.x1 - 0.5, rect.y1 - 1.0,
+        )
+        page.add_redact_annot(redact_rect, fill=(1, 1, 1))
+        page.apply_redactions()
+        builtin = _get_pymupdf_fontname(font_name, bold, italic)
+        page.insert_text(
+            fitz.Point(rect.x0, baseline_y), new_text,
+            fontname=builtin, fontsize=font_size, color=color,
+        )
+        return []
 
     if is_toc_edit:
         # TOC ENTRY — redact the full title+dots span, insert just the new title

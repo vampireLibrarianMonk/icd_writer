@@ -199,7 +199,16 @@ export function DocumentView() {
             }}
           />
 
-          {overlays.map((ov, idx) => (
+          {overlays.map((ov, idx) => {
+            // Hide block overlays that overlap with table cell zones
+            if (tableCells.length > 0) {
+              const ovCenterY = (ov.bbox.y0 + ov.bbox.y1) / 2;
+              const overlapsTable = tableCells.some(
+                (cell) => Math.abs(ovCenterY - (cell.bbox.y0 + cell.bbox.y1) / 2) < 30
+              );
+              if (overlapsTable) return null;
+            }
+            return (
             <div
               key={idx}
               onClick={() => handleClick(idx)}
@@ -231,7 +240,8 @@ export function DocumentView() {
               }}
               title={`${ov.label}: ${ov.text.slice(0, 40)}`}
             />
-          ))}
+            );
+          })}
 
           {/* Table cell overlays for inline editing */}
           {tableCells.map((cell) => (

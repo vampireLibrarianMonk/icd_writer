@@ -1100,8 +1100,110 @@ def create_app() -> FastAPI:
 
         return {"zones": zones}
 
+    @app.get("/document/page/{page_number}/table-cells")
+    def get_table_cells(page_number: int, y_min: float = 0, y_max: float = 9999):
+        """Return individual table cells with bounding boxes for inline editing.
 
-    def _merge_spans_to_paragraphs(spans: list) -> list:
+        Extracts spans from rawdict in the table zone, clusters by y (rows)
+        and x (columns), returns each cell with its text and bbox.
+        """
+        import fitz
+
+        session = state["session"]
+        doc_ir = state["document_ir"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        doc = fitz.open(session.document_path)
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            raise HTTPException(400, f"Invalid page: {page_number}")
+
+        page = doc[page_number - 1]
+        page_height = page.rect.height
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        doc.close()
+
+        # Collect spans in the table zone (skip header/footer)
+        table_spans = []
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    bbox = span["bbox"]
+                    y = bbox[1]
+                    if y < 60 or y > page_height - 60:
+                        continue
+                    if y < y_min or y > y_max:
+                        continue
+                    chars = span.get("chars", [])
+                    text = "".join(c["c"] for c in chars).strip()
+                    if text:
+                        table_spans.append({
+                            "text": text,
+                            "x0": bbox[0],
+                            "y0": bbox[1],
+                            "x1": bbox[2],
+                            "y1": bbox[3],
+                        })
+
+        if len(table_spans) < 4:
+            return {"cells": [], "rows": 0, "columns": 0}
+
+        # Cluster by y (rows) — tolerance 5pt
+        table_spans.sort(key=lambda s: (s["y0"], s["x0"]))
+        rows: list[list[dict]] = []
+        for span in table_spans:
+            placed = False
+            for row in rows:
+                if abs(span["y0"] - row[0]["y0"]) < 5:
+                    row.append(span)
+                    placed = True
+                    break
+            if not placed:
+                rows.append([span])
+
+        # Need at least 2 rows and 2 columns to be a table
+        if len(rows) < 2:
+            return {"cells": [], "rows": 0, "columns": 0}
+
+        max_cols = max(len(row) for row in rows)
+        if max_cols < 2:
+            return {"cells": [], "rows": 0, "columns": 0}
+
+        # Build cells with row/col indices
+        cells = []
+        for row_idx, row in enumerate(rows):
+            row.sort(key=lambda s: s["x0"])
+            for col_idx, span in enumerate(row):
+                cells.append({
+                    "id": f"cell-p{page_number:02d}-r{row_idx}-c{col_idx}",
+                    "text": span["text"],
+                    "bbox": {
+                        "x0": span["x0"],
+                        "y0": span["y0"],
+                        "x1": span["x1"],
+                        "y1": span["y1"],
+                    },
+                    "row": row_idx,
+                    "col": col_idx,
+                })
+
+        # Compute table bounding box
+        all_x0 = min(s["x0"] for s in table_spans)
+        all_y0 = min(s["y0"] for s in table_spans)
+        all_x1 = max(s["x1"] for s in table_spans)
+        all_y1 = max(s["y1"] for s in table_spans)
+
+        return {
+            "cells": cells,
+            "rows": len(rows),
+            "columns": max_cols,
+            "table_bbox": {"x0": all_x0, "y0": all_y0, "x1": all_x1, "y1": all_y1},
+        }
+
+
         """Merge body spans into paragraph groups (lines of span lists)."""
         import re
         if not spans:

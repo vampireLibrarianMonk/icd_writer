@@ -118,10 +118,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       const result = await api.undo();
       if (result.status === "undone") {
-        const { currentPage } = get();
-        const pageData = await api.getPage(currentPage);
         const actions = await api.getActions();
+        // Navigate to the affected page if different from current
+        const targetPage = result.page || get().currentPage;
+        const pageData = await api.getPage(targetPage);
         set((state) => ({
+          currentPage: targetPage,
           pageData,
           editCount: Math.max(0, state.editCount - 1),
           selectedBlock: null,
@@ -137,18 +139,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   redo: async () => {
-    await api.redo();
-    const { currentPage } = get();
-    const pageData = await api.getPage(currentPage);
-    const actions = await api.getActions();
-    set((state) => ({
-      pageData,
-      editCount: state.editCount + 1,
-      selectedBlock: null,
-      editText: "",
-      refreshTrigger: state.refreshTrigger + 1,
-      canUndo: actions.undo_available,
-      canRedo: actions.redo_available,
-    }));
+    const result = await api.redo();
+    if (result.status === "redone") {
+      const actions = await api.getActions();
+      const targetPage = result.page || get().currentPage;
+      const pageData = await api.getPage(targetPage);
+      set((state) => ({
+        currentPage: targetPage,
+        pageData,
+        editCount: state.editCount + 1,
+        selectedBlock: null,
+        editText: "",
+        refreshTrigger: state.refreshTrigger + 1,
+        canUndo: actions.undo_available,
+        canRedo: actions.redo_available,
+      }));
+    }
   },
 }));

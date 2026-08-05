@@ -2075,9 +2075,14 @@ def create_app() -> FastAPI:
                         block.text_verbatim = block.text_verbatim.replace(new_text, old_text)
                     else:
                         block.text_verbatim = old_text
-                    return {"status": "undone", "block_id": block_id, "restored_text": old_text}
+                    return {
+                        "status": "undone",
+                        "block_id": block_id,
+                        "page": page.page_number,
+                        "restored_text": old_text[:50],
+                    }
 
-        return {"status": "undone", "block_id": block_id}
+        return {"status": "undone", "block_id": block_id, "page": None}
 
     @app.post("/document/redo")
     def redo():
@@ -2102,9 +2107,14 @@ def create_app() -> FastAPI:
                         block.text_verbatim = block.text_verbatim.replace(old_text, new_text)
                     else:
                         block.text_verbatim = new_text
-                    return {"status": "redone", "block_id": block_id, "applied_text": new_text}
+                    return {
+                        "status": "redone",
+                        "block_id": block_id,
+                        "page": page.page_number,
+                        "applied_text": new_text[:50],
+                    }
 
-        return {"status": "redone", "block_id": block_id}
+        return {"status": "redone", "block_id": block_id, "page": None}
 
     # ─── Export ────────────────────────────────────────────────────
 

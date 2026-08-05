@@ -809,7 +809,14 @@ def get_page_edits_from_session(session, document_ir: DocumentIR, page_number: i
 
     from src.api.session import ActionType
 
-    # Collect net edits per block
+    # Get the set of block_ids that are currently on the undo stack (active edits).
+    # Edits that have been undone are NOT on the undo stack.
+    active_block_ids = set()
+    for action in session.undo_stack:
+        if action.block_id:
+            active_block_ids.add(action.block_id)
+
+    # Collect net edits per block — only for blocks with active (not undone) edits
     block_edits: dict[str, dict] = {}
 
     for action in session.actions:
@@ -817,6 +824,9 @@ def get_page_edits_from_session(session, document_ir: DocumentIR, page_number: i
             continue
         if action.page != page_number:
             continue
+        block_id = action.block_id
+        if block_id and block_id not in active_block_ids:
+            continue  # This edit was undone — skip it
         block_id = action.block_id
         old_text = action.data.get("old_text", "")
         new_text = action.data.get("new_text", "")

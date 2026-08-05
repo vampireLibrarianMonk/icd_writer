@@ -262,10 +262,45 @@ When an edit makes a block too large for the remaining page space, overflowing c
 
 All edits support undo/redo:
 
-- **File > Undo** (or Ctrl+Z) — reverts the last change
-- **File > Redo** (or Ctrl+Y) — re-applies an undone change
+- **Session > Undo** (or Ctrl+Z) — reverts the last change
+- **Session > Redo** (or Ctrl+Y) — re-applies an undone change
 - The undo stack tracks each individual edit
 - Page extensions are also undone (the extra page is removed)
+
+---
+
+### 4.7 Session Management
+
+Save and restore your editing sessions across restarts.
+
+**Saving:**
+
+1. Make several edits to the document
+2. Click **Session > Save As...** — enter a name (e.g., "tbr_resolution_pass1")
+3. The session file is saved to the `sessions/` directory
+
+**Loading:**
+
+1. Click **Session > Load...** — a list of saved sessions appears
+2. Enter the filename to load
+3. The document reopens with all edits restored
+4. Undo/redo state is preserved
+
+**New Session:**
+
+1. Click **Session > New Session**
+2. If you have unsaved edits, you'll be asked to confirm
+3. The editor resets to a clean state
+
+**Session Tab (right panel):**
+
+Click the **Session** tab to see a timeline of all actions:
+- Document opened
+- Each edit with page number and block
+- Undo/redo events
+- Save/export events
+
+The timeline updates live as you make edits.
 
 ---
 

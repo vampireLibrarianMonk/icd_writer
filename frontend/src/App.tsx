@@ -4,6 +4,7 @@ import { UnifiedEditor } from "./components/UnifiedEditor";
 import { SearchPanel } from "./components/SearchPanel";
 import { TBDDashboard } from "./components/TBDDashboardPanel";
 import { VersionDiffPanel } from "./components/VersionDiffPanel";
+import { SessionPanel } from "./components/SessionPanel";
 import { StatusBar } from "./components/StatusBar";
 import { UploadProgressPanel } from "./components/UploadProgressPanel";
 import { HelpModal } from "./components/HelpModal";
@@ -11,7 +12,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useEditorStore } from "./store/editorStore";
 import type { IngestStatus } from "./api/client";
 
-type RightPanel = "editor" | "search" | "tbd" | "diff";
+type RightPanel = "editor" | "search" | "tbd" | "diff" | "session";
 
 function App() {
   const [panelWidth, setPanelWidth] = useState(420);
@@ -159,6 +160,11 @@ function App() {
               active={activePanel === "diff"}
               onClick={() => setActivePanel("diff")}
             />
+            <PanelTab
+              label="📜 Session"
+              active={activePanel === "session"}
+              onClick={() => setActivePanel("session")}
+            />
           </div>
           {/* Panel content */}
           <div style={{ flex: 1, overflow: "hidden" }}>
@@ -166,6 +172,7 @@ function App() {
             {activePanel === "search" && <SearchPanel />}
             {activePanel === "tbd" && <TBDDashboard />}
             {activePanel === "diff" && <VersionDiffPanel />}
+            {activePanel === "session" && <SessionPanel />}
           </div>
         </div>
       </div>

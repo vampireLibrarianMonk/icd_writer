@@ -91,6 +91,150 @@ def create_app() -> FastAPI:
         session.record(ActionType.DOCUMENT_SAVED)
         return {"saved_to": str(journal_path)}
 
+    @app.post("/session/save-as")
+    def save_session_as(filename: str = "session"):
+        """Save the current session to a named file.
+
+        Writes a .icd-session JSON file that can be loaded later to restore
+        all edits and undo state.
+        """
+        session = state["session"]
+        if not session:
+            raise HTTPException(404, "No active session")
+
+        sessions_dir = Path("sessions")
+        sessions_dir.mkdir(exist_ok=True)
+
+        # Ensure filename has correct extension
+        if not filename.endswith(".icd-session"):
+            filename = filename + ".icd-session"
+
+        save_path = sessions_dir / filename
+        session.save_journal(save_path)
+        return {"status": "saved", "path": str(save_path), "filename": filename}
+
+    @app.post("/session/load")
+    def load_session(filename: str):
+        """Load a previously saved session file, restoring all edits.
+
+        Opens the referenced document and replays all BLOCK_EDITED actions
+        to reconstruct the Document IR state.
+        """
+        from src.api.session import Session as SessionModel
+
+        sessions_dir = Path("sessions")
+        if not filename.endswith(".icd-session"):
+            filename = filename + ".icd-session"
+
+        load_path = sessions_dir / filename
+        if not load_path.exists():
+            raise HTTPException(404, f"Session file not found: {filename}")
+
+        # Load the session journal
+        loaded = SessionModel.load_journal(load_path)
+
+        # Open the document referenced in the session
+        doc_path = loaded.document_path
+        if not doc_path or not Path(doc_path).exists():
+            raise HTTPException(400, f"Document not found: {doc_path}")
+
+        from src.pipeline import process_pdf
+
+        document_ir = process_pdf(Path(doc_path))
+        state["document_ir"] = document_ir
+        state["session"] = loaded
+
+        # Replay all BLOCK_EDITED actions to reconstruct IR state
+        for action in loaded.actions:
+            if action.action_type != ActionType.BLOCK_EDITED:
+                continue
+            block_id = action.block_id
+            new_text = action.data.get("new_text", "")
+            if not block_id or not new_text:
+                continue
+
+            # Find the block and apply the edit
+            for page in document_ir.pages:
+                for block in page.text_blocks:
+                    if block.id == block_id:
+                        block.text_verbatim = new_text
+                        break
+
+        return {
+            "status": "loaded",
+            "filename": filename,
+            "document": doc_path,
+            "edit_count": loaded.edit_count,
+            "actions": len(loaded.actions),
+        }
+
+    @app.get("/session/journal")
+    def get_session_journal():
+        """Return the full session action journal for the Session tab.
+
+        Each entry includes timestamp, action type, page, block, and a
+        human-readable summary.
+        """
+        session = state["session"]
+        if not session:
+            raise HTTPException(404, "No active session")
+
+        entries = []
+        for action in session.actions:
+            summary = ""
+            if action.action_type == ActionType.DOCUMENT_OPENED:
+                summary = f"Opened {action.data.get('path', '').split('/')[-1]}"
+            elif action.action_type == ActionType.BLOCK_EDITED:
+                page_str = f"page {action.page}" if action.page else ""
+                block_str = action.block_id or ""
+                old_preview = action.data.get("old_text", "")[:30]
+                new_preview = action.data.get("new_text", "")[:30]
+                summary = f"Edited {block_str} on {page_str}"
+            elif action.action_type == ActionType.DOCUMENT_SAVED:
+                summary = "Session saved"
+            elif action.action_type == ActionType.DOCUMENT_EXPORTED:
+                summary = "PDF exported"
+            elif action.action_type == ActionType.UNDO:
+                summary = "Undo"
+            elif action.action_type == ActionType.REDO:
+                summary = "Redo"
+            else:
+                summary = action.action_type.value
+
+            entries.append({
+                "id": action.id,
+                "timestamp": action.timestamp.isoformat(),
+                "action_type": action.action_type.value,
+                "page": action.page,
+                "block_id": action.block_id,
+                "summary": summary,
+            })
+
+        return {
+            "session_id": session.session_id,
+            "document": session.document_path,
+            "entries": entries,
+            "edit_count": session.edit_count,
+            "undo_available": len(session.undo_stack) > 0,
+            "redo_available": len(session.redo_stack) > 0,
+        }
+
+    @app.get("/session/files")
+    def list_session_files():
+        """List available session files that can be loaded."""
+        sessions_dir = Path("sessions")
+        if not sessions_dir.exists():
+            return {"files": []}
+
+        files = []
+        for f in sorted(sessions_dir.glob("*.icd-session")):
+            files.append({
+                "filename": f.name,
+                "size_bytes": f.stat().st_size,
+                "modified": f.stat().st_mtime,
+            })
+        return {"files": files}
+
     # ─── Cost Tracking ─────────────────────────────────────────────
 
     @app.get("/session/costs")

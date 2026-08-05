@@ -455,3 +455,69 @@ class TestTOCEditing:
                         return
         doc.close()
         pytest.fail("Edited TOC title not found in export rawdict")
+
+
+# ─── Session Persistence Tests ────────────────────────────────────────
+
+
+@pytest.mark.skipif(not HSI_PDF.exists(), reason="HSI PDF not found")
+class TestSessionPersistence:
+    """Test session save/load functionality."""
+
+    def test_save_and_load_restores_edits(self, client):
+        """Saved session can be loaded and edits are restored."""
+        # Make an edit
+        new_text = "4. Electrical Interface\nSESSION_PERSIST_TEST_MARKER"
+        client.put("/document/block/block-p07-b13", json={"new_text": new_text})
+
+        # Save session
+        save_res = client.post("/session/save-as?filename=test_persist")
+        assert save_res.json()["status"] == "saved"
+
+        # Get edited page image
+        img_edited = client.get("/document/page/7/image").content
+
+        # Start fresh session
+        client.post("/session/start")
+        client.post(f"/document/open?pdf_path={HSI_PDF}")
+        img_fresh = client.get("/document/page/7/image").content
+        assert img_fresh != img_edited, "Fresh session should show original"
+
+        # Load the saved session
+        load_res = client.post("/session/load?filename=test_persist")
+        assert load_res.json()["status"] == "loaded"
+
+        # Verify edit restored
+        elements = client.get("/document/page/7/elements").json()["elements"]
+        restored = next(
+            (e for e in elements if "SESSION_PERSIST_TEST_MARKER" in e.get("text", "")),
+            None,
+        )
+        assert restored is not None, "Edit not restored after session load"
+
+        # Cleanup
+        from pathlib import Path
+        Path("sessions/test_persist.icd-session").unlink(missing_ok=True)
+
+    def test_journal_endpoint_returns_actions(self, client):
+        """GET /session/journal returns action entries."""
+        client.put(
+            "/document/block/block-p07-b13",
+            json={"new_text": "4. Electrical Interface\nJOURNAL_TEST"},
+        )
+
+        journal = client.get("/session/journal").json()
+        assert journal["edit_count"] >= 1
+        assert len(journal["entries"]) >= 2  # document_opened + block_edited
+        assert any(e["action_type"] == "block_edited" for e in journal["entries"])
+
+    def test_session_files_listing(self, client):
+        """GET /session/files lists saved session files."""
+        client.post("/session/save-as?filename=test_list")
+        files = client.get("/session/files").json()
+        filenames = [f["filename"] for f in files["files"]]
+        assert "test_list.icd-session" in filenames
+
+        # Cleanup
+        from pathlib import Path
+        Path("sessions/test_list.icd-session").unlink(missing_ok=True)

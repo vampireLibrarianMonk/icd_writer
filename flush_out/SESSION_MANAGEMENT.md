@@ -81,6 +81,51 @@ Shows the action journal as a timeline:
 - New tab component showing the journal timeline
 - Auto-refreshes after edits
 
+### Phase D: User Guide testing steps
+
+Add to USER_GUIDE.md as a new section (e.g., Section 8 or integrated into Section 4):
+
+```
+### Session Management
+
+1. Open `HSI_SYS_015G.pdf` and make 2-3 edits (e.g., 4.2 TBR edit + 4.3 table cell edit)
+2. Click **Session > Save As...** — enter filename `my_test_session`
+3. Verify the status bar shows "Session saved"
+4. Click **Session > New** — confirms discard, clears all edits
+5. Verify the document viewer shows the original unedited PDF
+6. Click **Session > Load...** — select `my_test_session.icd-session`
+7. Verify:
+   - The correct document re-opens (HSI_SYS_015G.pdf)
+   - All edits are restored (page 5 shows "0.5", page 7 shows "25W")
+   - Undo is available (undo stack restored)
+   - The Session tab shows the action timeline with correct timestamps
+8. Click **Undo** — verify the last edit reverts
+9. Click **Session > Save** — overwrites the same file
+10. Restart the backend (`docker compose restart backend`)
+11. Click **Session > Load...** — select the same file
+12. Verify edits are restored after restart (session survives restart)
+```
+
+**Automated test** (add to `test_page_rebuild_pipeline.py`):
+```python
+class TestSessionPersistence:
+    def test_save_and_load_restores_edits(self, client):
+        # Make an edit
+        client.put("/document/block/block-p05-b08", json={"new_text": "..."})
+        # Save session
+        save_res = client.post("/session/save-as", json={"filename": "test_session"})
+        assert save_res.json()["status"] == "saved"
+        # Start fresh
+        client.post("/session/start")
+        client.post("/document/open?pdf_path=icds/digital/HSI_SYS_015G.pdf")
+        # Load session
+        load_res = client.post("/session/load", json={"filename": "test_session"})
+        assert load_res.json()["status"] == "loaded"
+        # Verify edit is restored
+        img = client.get("/document/page/5/image").content
+        # Image should differ from unedited original
+```
+
 ## Open Questions
 
 1. Where to store session files? `./sessions/` directory? User-specified?

@@ -20,7 +20,9 @@ export function Toolbar({ onFileUpload, onShowHelp }: ToolbarProps) {
   const [darkMode, setDarkMode] = useState(false);
   const [availableDocs, setAvailableDocs] = useState<DocInfo[]>([]);
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const fileMenuRef = useRef<HTMLDivElement>(null);
+  const sessionMenuRef = useRef<HTMLDivElement>(null);
 
   // Load available documents on mount and after document changes
   useEffect(() => {
@@ -35,12 +37,15 @@ export function Toolbar({ onFileUpload, onShowHelp }: ToolbarProps) {
       if (fileMenuRef.current && !fileMenuRef.current.contains(e.target as Node)) {
         setFileMenuOpen(false);
       }
+      if (sessionMenuRef.current && !sessionMenuRef.current.contains(e.target as Node)) {
+        setSessionMenuOpen(false);
+      }
     };
-    if (fileMenuOpen) {
+    if (fileMenuOpen || sessionMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [fileMenuOpen]);
+  }, [fileMenuOpen, sessionMenuOpen]);
 
   const handleDocSwitch = async (path: string) => {
     if (path === documentPath) return;
@@ -65,8 +70,66 @@ export function Toolbar({ onFileUpload, onShowHelp }: ToolbarProps) {
   };
 
   const handleSave = async () => {
-    setFileMenuOpen(false);
-    await api.saveSession();
+    setSessionMenuOpen(false);
+    const API_BASE = import.meta.env.VITE_API_BASE || "";
+    await fetch(`${API_BASE}/session/save-as?filename=autosave`, { method: "POST" });
+  };
+
+  const handleSaveAs = async () => {
+    setSessionMenuOpen(false);
+    const filename = window.prompt("Save session as:", "my_session");
+    if (!filename) return;
+    const API_BASE = import.meta.env.VITE_API_BASE || "";
+    const res = await fetch(`${API_BASE}/session/save-as?filename=${encodeURIComponent(filename)}`, { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      alert(`Session saved: ${data.filename}`);
+    }
+  };
+
+  const handleSessionLoad = async () => {
+    setSessionMenuOpen(false);
+    const API_BASE = import.meta.env.VITE_API_BASE || "";
+    // Get available session files
+    const filesRes = await fetch(`${API_BASE}/session/files`).then((r) => r.json());
+    const files = filesRes.files || [];
+    if (files.length === 0) {
+      alert("No saved sessions found.");
+      return;
+    }
+    const choices = files.map((f: any) => f.filename).join("\n");
+    const selected = window.prompt(`Available sessions:\n${choices}\n\nEnter filename to load:`);
+    if (!selected) return;
+    const loadRes = await fetch(`${API_BASE}/session/load?filename=${encodeURIComponent(selected)}`, { method: "POST" });
+    if (loadRes.ok) {
+      const data = await loadRes.json();
+      // Refresh the editor state
+      useEditorStore.getState().loadDocument(data.document);
+    } else {
+      const err = await loadRes.json().catch(() => ({ detail: "Load failed" }));
+      alert(err.detail || "Load failed");
+    }
+  };
+
+  const handleNewSession = async () => {
+    setSessionMenuOpen(false);
+    if (editCount > 0) {
+      const confirmed = window.confirm("Discard current edits and start a new session?");
+      if (!confirmed) return;
+    }
+    await api.startSession();
+    useEditorStore.setState({
+      documentLoaded: false,
+      documentPath: "",
+      totalPages: 0,
+      currentPage: 1,
+      pageData: null,
+      selectedBlock: null,
+      editText: "",
+      editCount: 0,
+      canUndo: false,
+      canRedo: false,
+    });
   };
 
   const handleExport = async () => {
@@ -169,12 +232,51 @@ export function Toolbar({ onFileUpload, onShowHelp }: ToolbarProps) {
           }}>
             <MenuItem label="Upload & Index..." shortcut="Ctrl+U" onClick={() => { setFileMenuOpen(false); handleUploadClick(); }} />
             <MenuDivider />
-            <MenuItem label="Save Session" shortcut="Ctrl+S" onClick={handleSave} disabled={!documentLoaded} />
             <MenuItem label="Export PDF..." onClick={handleExport} disabled={!documentLoaded} />
             <MenuItem label="Remove Document..." onClick={handleDelete} disabled={!documentLoaded} />
+          </div>
+        )}
+      </div>
+
+      {/* Session dropdown menu */}
+      <div ref={sessionMenuRef} style={{ position: "relative" }}>
+        <button
+          onClick={() => { setSessionMenuOpen(!sessionMenuOpen); setFileMenuOpen(false); }}
+          style={{
+            background: "transparent",
+            border: "none",
+            padding: "4px 10px",
+            cursor: "pointer",
+            fontWeight: 500,
+            fontSize: "13px",
+            borderRadius: "4px",
+            color: "var(--text-primary)",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary, #e8e8e8)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          Session
+        </button>
+        {sessionMenuOpen && (
+          <div style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            background: "var(--bg-primary, #fff)",
+            border: "1px solid var(--border, #ddd)",
+            borderRadius: "6px",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+            minWidth: "180px",
+            zIndex: 1000,
+            padding: "4px 0",
+          }}>
+            <MenuItem label="Save" shortcut="Ctrl+S" onClick={handleSave} disabled={!documentLoaded} />
+            <MenuItem label="Save As..." onClick={handleSaveAs} disabled={!documentLoaded} />
+            <MenuItem label="Load..." onClick={handleSessionLoad} />
+            <MenuItem label="New Session" onClick={handleNewSession} />
             <MenuDivider />
-            <MenuItem label="Undo" shortcut="Ctrl+Z" onClick={() => { setFileMenuOpen(false); undo(); }} disabled={!canUndo} />
-            <MenuItem label="Redo" shortcut="Ctrl+Y" onClick={() => { setFileMenuOpen(false); redo(); }} disabled={!canRedo} />
+            <MenuItem label="Undo" shortcut="Ctrl+Z" onClick={() => { setSessionMenuOpen(false); undo(); }} disabled={!canUndo} />
+            <MenuItem label="Redo" shortcut="Ctrl+Y" onClick={() => { setSessionMenuOpen(false); redo(); }} disabled={!canRedo} />
           </div>
         )}
       </div>

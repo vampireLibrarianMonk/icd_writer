@@ -169,12 +169,7 @@ export function DocumentView() {
   }
 
   const scale = 0.75;
-  // Force unique URL on every render triggered by refreshTrigger
-  const [imgVersion, setImgVersion] = useState(0);
-  useEffect(() => {
-    setImgVersion((v) => v + 1);
-  }, [refreshTrigger, currentPage]);
-  const pageImageUrl = `${API_BASE}/document/page/${currentPage}/image?_=${imgVersion}_${refreshTrigger}`;
+  const pageImageUrl = `${API_BASE}/document/page/${currentPage}/image?v=${refreshTrigger}&r=${Math.random()}`;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>

@@ -187,17 +187,34 @@ def create_app() -> FastAPI:
             elif action.action_type == ActionType.BLOCK_EDITED:
                 page_str = f"page {action.page}" if action.page else ""
                 block_str = action.block_id or ""
-                old_preview = action.data.get("old_text", "")[:30]
-                new_preview = action.data.get("new_text", "")[:30]
-                summary = f"Edited {block_str} on {page_str}"
+                old_text = action.data.get("old_text", "")
+                new_text = action.data.get("new_text", "")
+                # Show a preview of what changed
+                if len(old_text) < 50 and len(new_text) < 50:
+                    summary = f"Changed \"{old_text[:30]}\" → \"{new_text[:30]}\" on {page_str}"
+                else:
+                    summary = f"Edited {block_str} on {page_str}"
             elif action.action_type == ActionType.DOCUMENT_SAVED:
                 summary = "Session saved"
             elif action.action_type == ActionType.DOCUMENT_EXPORTED:
                 summary = "PDF exported"
             elif action.action_type == ActionType.UNDO:
-                summary = "Undo"
+                undone_id = action.data.get("undone_action_id", "")
+                # Find the undone action to show what was undone
+                undone_action = next((a for a in session.actions if a.id == undone_id), None)
+                if undone_action and undone_action.block_id:
+                    page_str = f"page {undone_action.page}" if undone_action.page else ""
+                    summary = f"Undo edit on {page_str} ({undone_action.block_id})"
+                else:
+                    summary = "Undo"
             elif action.action_type == ActionType.REDO:
-                summary = "Redo"
+                redone_id = action.data.get("redone_action_id", "")
+                redone_action = next((a for a in session.actions if a.id == redone_id), None)
+                if redone_action and redone_action.block_id:
+                    page_str = f"page {redone_action.page}" if redone_action.page else ""
+                    summary = f"Redo edit on {page_str} ({redone_action.block_id})"
+                else:
+                    summary = "Redo"
             else:
                 summary = action.action_type.value
 

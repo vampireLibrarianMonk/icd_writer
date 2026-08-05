@@ -6,6 +6,46 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.3.0] — 2026-08-01
+
+### Added
+- **Table inline cell editor**: click directly on a table cell in the document viewer
+  to edit it in-place (no sidebar needed). Green dashed overlays show editable cells.
+- **Session management**: top-level Session menu with Save, Save As, Load, New Session.
+  Sessions persist to `.icd-session` files and can be restored across restarts.
+- **Session tab**: right panel tab showing a live action timeline (edit, undo, redo events
+  with timestamps, page numbers, and change descriptions).
+- **TOC editing** (4.5): edit Table of Contents entries (title and page reference) via the
+  TOC Editor panel. Changes appear in preview and export with correct indentation.
+- GET /document/page/{n}/table-cells endpoint for per-cell detection
+- GET /session/journal, POST /session/save-as, POST /session/load, GET /session/files
+- PUT /document/page/{n}/toc endpoint for TOC entry editing
+
+### Fixed
+- **Undo/redo preview**: undone edits no longer show in the page preview. Fixed by
+  filtering `get_page_edits_from_session` to only include active (not undone) edits.
+- **Undo/redo navigation**: undo/redo now navigates to the affected page automatically.
+- **Table cell alignment**: cell values centered at original text center-x position.
+- **Table structure preservation**: multi-line blocks always use fragment extraction
+  (prevents paragraph reflow from destroying table layout).
+- **TOC entry preservation**: TOC edits use inline redact (not paragraph reflow),
+  section numbers preserved at x=90, titles at x=114.
+- **Font rendering**: all text insertion uses PDF base-14 fonts (Times-Roman, Helvetica,
+  Courier) for universal viewer compatibility. No more "Liberation Serif not found" errors.
+- **Table cell borders**: redaction rect shrunk by 0.5-1pt to avoid covering thin border rects.
+- **Image cache**: nginx proxy sends no-cache headers, image URLs use Math.random() for
+  guaranteed fresh fetches.
+- **TBD Dashboard filter**: initializes from currently opened document on mount.
+- Block overlays hidden when table cell overlays are present in same zone.
+
+### Changed
+- File menu simplified (removed Save/Undo/Redo — moved to Session menu)
+- Session menu is now a top-level toolbar item (Save, Save As, Load, New, Undo, Redo)
+- Docker compose mounts `./src:/app/src` for live code reloading during development
+- 21 integration tests (3 new for session persistence, 1 for TOC indentation)
+
+---
+
 ## [1.2.1] — 2026-08-01
 
 ### Fixed

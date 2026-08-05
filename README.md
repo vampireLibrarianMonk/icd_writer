@@ -26,7 +26,9 @@ See [USER_GUIDE.md](USER_GUIDE.md) for a full walkthrough with examples.
 ## Features
 
 - **PDF Extraction** — Text blocks with bounding boxes, fonts, and reading order
-- **Document Editing** — Click-to-edit paragraphs, table cells, and TOC entries with undo/redo
+- **Document Editing** — Click-to-edit paragraphs, table cells (inline), and TOC entries with undo/redo
+- **Table Cell Editor** — Click directly on table cells in the viewer for instant inline editing
+- **Session Management** — Save/Load editing sessions across restarts with full action timeline
 - **Page Extension** — Edits that overflow a page merge naturally onto the next page
 - **Heading Preservation** — Section headings stay in their original bold font when paragraphs below are edited
 - **Semantic Search** — Hybrid keyword + vector search across all indexed ICDs

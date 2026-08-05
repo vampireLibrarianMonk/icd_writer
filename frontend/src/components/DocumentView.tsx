@@ -89,8 +89,14 @@ export function DocumentView() {
         { method: "PUT" }
       );
       setEditingCell(null);
-      // Refresh page image and data
-      useEditorStore.setState((s) => ({ refreshTrigger: s.refreshTrigger + 1 }));
+      // Refresh page image, undo/redo state, and cell data
+      const actionsRes = await fetch(`${API_BASE}/session/actions`).then((r) => r.json());
+      useEditorStore.setState((s) => ({
+        refreshTrigger: s.refreshTrigger + 1,
+        editCount: s.editCount + 1,
+        canUndo: actionsRes.undo_available,
+        canRedo: actionsRes.redo_available,
+      }));
     } catch (e) {
       console.error("Cell edit failed:", e);
       setEditingCell(null);

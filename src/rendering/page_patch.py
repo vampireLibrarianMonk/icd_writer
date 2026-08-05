@@ -617,9 +617,10 @@ def _apply_edit_to_page(page: fitz.Page, old_text: str, new_text: str, inline: b
             if is_toc_edit:
                 break
 
-    # INLINE mode: simple redact + insert (for table cells and short replacements)
-    # Skips paragraph reflow. TOC edits go through their own dedicated path below.
-    if not is_toc_edit and (inline or (len(old_text) < 80 and "\n" not in old_text)):
+    # INLINE mode: simple redact + insert. Only used when explicitly flagged
+    # (table-cell edits via PUT /document/table-cell set inline=True).
+    # Paragraph edits MUST go through reflow to close/fill gaps properly.
+    if not is_toc_edit and inline:
         redact_rect = fitz.Rect(
             rect.x0 + 0.5, rect.y0 + 0.5,
             rect.x1 - 0.5, rect.y1 - 1.0,

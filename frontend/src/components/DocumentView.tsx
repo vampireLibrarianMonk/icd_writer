@@ -169,7 +169,7 @@ export function DocumentView() {
   }
 
   const scale = 0.75;
-  const pageImageUrl = `${API_BASE}/document/page/${currentPage}/image?v=${refreshTrigger}`;
+  const pageImageUrl = `${API_BASE}/document/page/${currentPage}/image?v=${refreshTrigger}&t=${Date.now()}`;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>

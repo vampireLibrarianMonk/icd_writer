@@ -72,7 +72,20 @@ def analyze_page_content(pdf_path: Path | str, page_number: int) -> dict:
                     body_spans.append(entry)
 
     # Determine body content type
-    has_toc = any("..." in s["text"] for s in body_spans)
+    import re
+    # TOC detection: look for lines with leader dots AND page number references
+    # A real TOC has multiple lines matching "Title...N" pattern
+    toc_line_count = sum(
+        1 for s in body_spans
+        if ("..." in s["text"] or s["text"].count(".") > 5)
+        and re.search(r"\d+\s*$", s["text"])
+    )
+    # Also count lines with section numbering patterns (e.g., "1. ", "3.2.1 ")
+    section_numbered = sum(
+        1 for s in body_spans
+        if re.match(r"^\d+[\.\d]*\.?\s+\w", s["text"])
+    )
+    has_toc = toc_line_count >= 3 or (toc_line_count >= 2 and section_numbered >= 2)
     has_table = drawings_count > 20
     has_bullets = any(
         s["text"].startswith("•") or s["text"].startswith("- ")

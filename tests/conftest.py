@@ -1,12 +1,14 @@
 """Shared test configuration and fixtures.
 
 Provides:
+- .test-env loading for isolated test environment variables
 - skip markers for tests requiring WeasyPrint (GTK/Pango)
 - docker_only marker for tests that must run in Docker
 - automatic ICD PDF indexing before tests (ensures _document_ir.yaml files exist)
 """
 
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -14,9 +16,45 @@ import pytest
 logger = logging.getLogger(__name__)
 
 
-# ─── Paths ─────────────────────────────────────────────────────────────
+# ─── Load .test-env ────────────────────────────────────────────────────
 
 ROOT_DIR = Path(__file__).parent.parent
+_TEST_ENV_FILE = ROOT_DIR / ".test-env"
+
+
+def _load_test_env() -> None:
+    """Load .test-env into os.environ (does NOT override vars already set).
+
+    Uses python-dotenv if available, otherwise falls back to a minimal parser.
+    This ensures tests run with consistent, isolated environment variables
+    regardless of the host shell's .env or exported vars.
+    """
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_TEST_ENV_FILE, override=False)
+        logger.debug(f"Loaded test env from {_TEST_ENV_FILE} (python-dotenv)")
+    except ImportError:
+        # Fallback: parse key=value lines manually
+        if _TEST_ENV_FILE.exists():
+            for line in _TEST_ENV_FILE.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip()
+                    # Don't override existing environment variables
+                    if key not in os.environ:
+                        os.environ[key] = value
+            logger.debug(f"Loaded test env from {_TEST_ENV_FILE} (manual parse)")
+
+
+_load_test_env()
+
+
+# ─── Paths ─────────────────────────────────────────────────────────────
+
 ICDS_DIGITAL_DIR = ROOT_DIR / "icds" / "digital"
 ICDS_FLAT_DIR = ROOT_DIR / "icds" / "flat"
 OUTPUT_DIR = ROOT_DIR / "output"

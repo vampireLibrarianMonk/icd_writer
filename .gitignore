@@ -42,5 +42,6 @@ htmlcov/
 # Environment variables
 .env
 .env.local
+.test-env
 .kiro/
 .kiro/

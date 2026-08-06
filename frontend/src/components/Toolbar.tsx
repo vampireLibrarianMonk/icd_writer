@@ -146,6 +146,20 @@ export function Toolbar({ onFileUpload, onShowHelp }: ToolbarProps) {
     window.location.href = `${API_BASE}/document/export-download?filename=${encodeURIComponent(exportName)}`;
   };
 
+  const handleSaveDocument = async () => {
+    setFileMenuOpen(false);
+    const API_BASE = import.meta.env.VITE_API_BASE || "";
+    const res = await fetch(`${API_BASE}/document/save`, { method: "POST" });
+    if (res.ok) {
+      useEditorStore.setState((s) => ({
+        refreshTrigger: s.refreshTrigger + 1,
+      }));
+    } else {
+      const err = await res.json().catch(() => ({ detail: "Save failed" }));
+      alert(err.detail || "Save failed");
+    }
+  };
+
   const handleDelete = async () => {
     setFileMenuOpen(false);
     const docPath = useEditorStore.getState().documentPath;
@@ -232,7 +246,9 @@ export function Toolbar({ onFileUpload, onShowHelp }: ToolbarProps) {
           }}>
             <MenuItem label="Upload & Index..." shortcut="Ctrl+U" onClick={() => { setFileMenuOpen(false); handleUploadClick(); }} />
             <MenuDivider />
+            <MenuItem label="Save Document" shortcut="Ctrl+S" onClick={handleSaveDocument} disabled={!documentLoaded} />
             <MenuItem label="Export PDF..." onClick={handleExport} disabled={!documentLoaded} />
+            <MenuDivider />
             <MenuItem label="Remove Document..." onClick={handleDelete} disabled={!documentLoaded} />
           </div>
         )}

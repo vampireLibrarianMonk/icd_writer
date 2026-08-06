@@ -190,23 +190,65 @@ Edit text blocks directly in the PDF. If edits expand content past the page boun
 
 ---
 
-### 4.3 Editing Table Data (TBR in a Table)
+### 4.3 Editing Table Data
+
+Tables are edited through two complementary interfaces:
+- **Inline cell editing** — click a cell directly on the page image for quick single-value changes
+- **Table Editor panel** — use the sidebar grid for structural changes (add/delete rows)
+
+#### Inline Cell Edit (Quick Single-Value Change)
 
 1. Navigate to **page 7** (Section 3.2.1 — Spectrometer Heaters)
-2. Click directly on the text overlay containing the table data (not the table zone box):
-   Look for the overlay showing *"Characteristic Setting Power 30W (TBR-UCB-110)..."*
-3. The **Editor** tab shows the full text block
-4. Find `30W (TBR-UCB-110)` and change it to `25W`
-5. Click **Apply**
-6. The page re-renders showing the updated value
+2. Click a cell in the table on the page image — green dashed overlays appear on hover
+3. An input field appears over the cell
+4. Type the new value (e.g., change `30W (TBR-UCB-110)` to `25W`)
+5. Press **Enter** to save or **Escape** to cancel
+6. The page image re-renders with the updated value
 
-**Tip:** If the table zone editor opens instead (showing a grid), click outside it to deselect, then click the text overlay directly. Some tables are stored as text blocks rather than structured grids.
+#### Table Editor Panel (Add/Delete Rows)
 
-**Note:** After resolving a TBR in the document text, go to the **TBDs** tab and update the item's status from "Open" to "Resolved" to keep the dashboard in sync.
+The Table Editor appears automatically in the right-side panel when you navigate to a page with tables.
+
+1. Navigate to **page 7** — the **Table Editor** appears at the top of the editor panel
+2. If the page has multiple tables, use the **dropdown** to select which table to edit
+3. The table displays as an interactive HTML grid:
+   - Click any cell to edit its text inline
+   - Press **Enter** to confirm, **Escape** to cancel
+4. **Adding a row:**
+   - Click **+ Row** — an empty row appears at the bottom
+   - The first cell is automatically focused for editing
+   - Tab through cells to fill in values
+5. **Deleting a row:**
+   - Click any cell in the row you want to delete (the row highlights)
+   - Click **- Row** — the row is removed from the grid
+   - Note: the header row (row 1) cannot be deleted
+6. Click **Apply Table Changes** — the backend redraws the entire table zone on the PDF
+7. The page image refreshes showing the new table structure
+
+**What happens on Apply:**
+
+| Action | Result |
+|--------|--------|
+| Cell text change | Text redrawn at cell center with matching font |
+| Row added | New row with borders drawn below existing rows |
+| Row deleted | Table redrawn without that row, content below shifts up |
+| Column count | Always preserved from the original table structure |
+
+**Note:** Table changes are made to the working copy. Use **File > Save Document** to persist them to the original PDF.
 
 ---
 
-### 4.4 Triggering Page Extension (Overflow)
+### 4.4 Saving the Document
+
+All edits (text, tables, TOC) are made to a working copy of the PDF. The original file is never modified until you explicitly save.
+
+- **File > Save Document** (Ctrl+S) — writes the working copy back to the original file path
+- **File > Export PDF...** — exports a patched copy to the output directory (for download)
+- If you close without saving, the original remains untouched
+
+---
+
+### 4.5 Triggering Page Extension (Overflow)
 
 When an edit makes a block too large for the remaining page space, overflowing content moves to a new page.
 
@@ -235,7 +277,7 @@ When an edit makes a block too large for the remaining page space, overflowing c
 
 ---
 
-### 4.5 Editing the Table of Contents
+### 4.6 Editing the Table of Contents
 
 1. Navigate to **page 3** (Table of Contents)
 2. The **TOC Editor** panel appears automatically below the document viewer
@@ -258,7 +300,7 @@ When an edit makes a block too large for the remaining page space, overflowing c
 
 ---
 
-### 4.6 Undo and Redo
+### 4.7 Undo and Redo
 
 All edits support undo/redo:
 
@@ -269,7 +311,7 @@ All edits support undo/redo:
 
 ---
 
-### 4.7 Session Management
+### 4.8 Session Management
 
 Save and restore your editing sessions across restarts.
 

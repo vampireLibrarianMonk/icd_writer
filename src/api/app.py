@@ -26,6 +26,13 @@ class EditRequest(BaseModel):
     new_text: str
 
 
+class TableRebuildRequest(BaseModel):
+    """Request body for rebuilding a table zone with new data."""
+    y_min: float
+    y_max: float
+    data: list[list[str]]  # 2D array: rows x columns of cell text
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="ICD Writer",
@@ -41,7 +48,71 @@ def create_app() -> FastAPI:
     )
 
     # In-memory state (single-user MVP)
-    state = {"session": None, "document_ir": None, "config": ModelConfig(), "cost_ledger": []}
+    state = {"session": None, "document_ir": None, "config": ModelConfig(), "cost_ledger": [], "working_copy_path": None, "font_cache": None}
+
+    def _get_source_path() -> str:
+        """Return the working copy path if available, otherwise the original."""
+        if state["working_copy_path"] and Path(state["working_copy_path"]).exists():
+            return state["working_copy_path"]
+        session = state["session"]
+        if session and session.document_path:
+            return session.document_path
+        return ""
+
+    def _insert_text_with_font(page, point, text: str, font_name: str, font_size: float,
+                               bold: bool = False, italic: bool = False, color=(0, 0, 0)):
+        """Insert text using the best available font (extracted > system > base-14).
+
+        Uses the font cache to get the original document's font when possible.
+        Falls back gracefully to system fonts then base-14.
+        """
+        import tempfile
+        from src.rendering.font_cache import FontCache
+
+        cache: FontCache | None = state.get("font_cache")
+        if cache:
+            font_obj, fontname, fontbuffer = cache.get_font(font_name, bold, italic)
+        else:
+            font_obj, fontname, fontbuffer = None, None, None
+
+        if fontbuffer:
+            # Write font buffer to a temp file for insert_text
+            import os
+            tmp_dir = Path("output")
+            tmp_dir.mkdir(exist_ok=True)
+            tmp_font = tmp_dir / ".tmp_font.ttf"
+            tmp_font.write_bytes(fontbuffer)
+            try:
+                page.insert_text(point, text, fontfile=str(tmp_font),
+                                 fontsize=font_size, color=color)
+            except Exception:
+                # If the extracted font fails (subset issue), fall back to base-14
+                from src.rendering.page_patch import _get_pymupdf_fontname
+                builtin = _get_pymupdf_fontname(font_name, bold, italic)
+                page.insert_text(point, text, fontname=builtin,
+                                 fontsize=font_size, color=color)
+            finally:
+                tmp_font.unlink(missing_ok=True)
+        elif fontname:
+            page.insert_text(point, text, fontname=fontname,
+                             fontsize=font_size, color=color)
+        else:
+            # Ultimate fallback
+            from src.rendering.page_patch import _get_pymupdf_fontname
+            builtin = _get_pymupdf_fontname(font_name, bold, italic)
+            page.insert_text(point, text, fontname=builtin,
+                             fontsize=font_size, color=color)
+
+    def _get_text_width(text: str, font_name: str, font_size: float,
+                        bold: bool = False, italic: bool = False) -> float:
+        """Calculate text width using the best available font."""
+        from src.rendering.font_cache import FontCache
+
+        cache: FontCache | None = state.get("font_cache")
+        if cache:
+            return cache.text_width(text, font_name, font_size, bold, italic)
+        # Fallback estimate
+        return len(text) * font_size * 0.5
 
     # ─── Session ────────────────────────────────────────────────────
 
@@ -747,6 +818,18 @@ def create_app() -> FastAPI:
             session.document_sha256 = document_ir.metadata.sha256
             session.record(ActionType.DOCUMENT_OPENED, data={"path": str(path), "method": method})
 
+        # Create a working copy so the original is never mutated
+        import shutil
+        output_dir = Path("output")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        working_copy = output_dir / f".working_{path.name}"
+        shutil.copy2(str(path), str(working_copy))
+        state["working_copy_path"] = str(working_copy)
+
+        # Build font cache from the source PDF for pixel-accurate text insertion
+        from src.rendering.font_cache import FontCache
+        state["font_cache"] = FontCache.from_pdf(str(path))
+
         # Check for related versions
         from src.version_diff import detect_families, normalize_stem
         related_versions = []
@@ -794,6 +877,14 @@ def create_app() -> FastAPI:
                 ActionType.OCR_REQUESTED,
                 data={"cost": cost_tracker.total_cost, "pages": document_ir.page_count},
             )
+
+        # Create a working copy so the original is never mutated
+        import shutil
+        output_dir = Path("output")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        working_copy = output_dir / f".working_{path.name}"
+        shutil.copy2(str(path), str(working_copy))
+        state["working_copy_path"] = str(working_copy)
 
         return {
             "status": "ready",
@@ -847,7 +938,7 @@ def create_app() -> FastAPI:
         if not session or not session.document_path:
             raise HTTPException(404, "No document loaded")
 
-        doc = fitz.open(session.document_path)
+        doc = fitz.open(_get_source_path())
         if page_number < 1 or page_number > len(doc):
             doc.close()
             raise HTTPException(400, f"Invalid page: {page_number}")
@@ -886,6 +977,59 @@ def create_app() -> FastAPI:
         if len(spans) < 6:
             return {"has_table": False}
 
+        # Apply any pending edits from the session to the span text
+        # (so the panel shows current values, not stale PDF text)
+        if session and session.undo_stack:
+            from src.rendering.page_patch import get_page_edits_from_session
+            doc_ir = state["document_ir"]
+            if doc_ir:
+                edits = get_page_edits_from_session(session, doc_ir, page_number)
+                for edit in edits:
+                    old_t = edit.get("old_text", "")
+                    new_t = edit.get("new_text", "")
+                    if old_t and new_t and old_t != new_t:
+                        for s in spans:
+                            if old_t in s["text"]:
+                                s["text"] = s["text"].replace(old_t, new_t)
+
+        # Merge adjacent spans on the same line (e.g., "Temperature," + "°" + "C")
+        # Group spans by y-row first (5pt tolerance), then within each row
+        # merge consecutive spans where x-gap < 15pt
+        spans.sort(key=lambda s: (s["y0"], s["x0"]))
+
+        # Step 1: Group into y-rows
+        y_rows: list[list[dict]] = []
+        for s in spans:
+            placed = False
+            for row in y_rows:
+                if abs(s["y0"] - row[0]["y0"]) < 5:
+                    row.append(s)
+                    placed = True
+                    break
+            if not placed:
+                y_rows.append([s])
+
+        # Step 2: Within each row, sort by x and merge adjacent spans
+        merged_spans = []
+        for row in y_rows:
+            row.sort(key=lambda s: s["x0"])
+            row_merged: list[dict] = []
+            for s in row:
+                if row_merged:
+                    prev = row_merged[-1]
+                    x_gap = s["x0"] - prev["x1"]
+                    if x_gap < 15:
+                        prev["text"] = prev["text"] + s["text"]
+                        prev["x1"] = max(prev["x1"], s["x1"])
+                        prev["y1"] = max(prev["y1"], s["y1"])
+                        continue
+                row_merged.append(dict(s))
+            merged_spans.extend(row_merged)
+        spans = merged_spans
+
+        if len(spans) < 4:
+            return {"has_table": False}
+
         # Cluster x positions into columns (30pt tolerance)
         x_values = [s["x0"] for s in spans]
         columns = _cluster_positions(x_values, tolerance=30)
@@ -897,17 +1041,25 @@ def create_app() -> FastAPI:
         if len(columns) < 2 or len(rows) < 3:
             return {"has_table": False}
 
-        # Build table grid
+        # Build table grid — assign each span to its nearest column and row
         table_data = []
         for row_y in rows:
-            row_cells = []
-            for col_x in columns:
-                cell_spans = [
-                    s for s in spans
-                    if abs(s["x0"] - col_x) < 30 and abs(s["y0"] - row_y) < 8
-                ]
-                cell_text = " ".join(s["text"] for s in cell_spans)
-                row_cells.append({"text": cell_text, "block_id": None})
+            row_cells = [{"text": "", "block_id": None} for _ in columns]
+            row_spans = [s for s in spans if abs(s["y0"] - row_y) < 8]
+            for s in row_spans:
+                # Find nearest column
+                best_col = 0
+                best_dist = abs(s["x0"] - columns[0])
+                for ci, col_x in enumerate(columns):
+                    dist = abs(s["x0"] - col_x)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_col = ci
+                # Append text to that column cell
+                if row_cells[best_col]["text"]:
+                    row_cells[best_col]["text"] += " " + s["text"]
+                else:
+                    row_cells[best_col]["text"] = s["text"]
             table_data.append(row_cells)
 
         # Filter empty rows
@@ -942,7 +1094,272 @@ def create_app() -> FastAPI:
             if len(c) >= 2
         ]
 
+    @app.post("/document/page/{page_number}/table-rebuild")
+    def rebuild_table(page_number: int, req: TableRebuildRequest):
+        """Rebuild a table zone with the provided cell data.
 
+        Redacts the entire table zone on the working copy, then redraws
+        all rows, columns, borders, and text from scratch using the
+        structured data provided.
+
+        This is the atomic "Apply Table Changes" operation — the frontend
+        edits the table as structured data, then sends the full table here.
+        """
+        import fitz
+
+        session = state["session"]
+        doc_ir = state["document_ir"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        source_path = _get_source_path()
+        doc = fitz.open(source_path)
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            raise HTTPException(400, f"Invalid page: {page_number}")
+
+        page = doc[page_number - 1]
+
+        if not req.data or len(req.data) < 1:
+            doc.close()
+            raise HTTPException(400, "Table data must have at least one row")
+
+        num_cols = max(len(row) for row in req.data)
+        num_rows = len(req.data)
+
+        # Step 1: Analyze existing table geometry from HORIZONTAL borders only
+        # (Vertical borders are unreliable after rebuilds — we derive columns from width)
+        drawings = page.get_drawings()
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+
+        # Find horizontal borders in the zone (these span the full table width)
+        h_lines = []
+        for d in drawings:
+            rect = d.get("rect")
+            if not rect:
+                continue
+            r = fitz.Rect(rect)
+            if r.height < 3 and r.width > 20:
+                if req.y_min - 10 <= r.y0 <= req.y_max + 10:
+                    h_lines.append((r.y0, r.x0, r.x1))  # y, left-x, right-x
+
+        if len(h_lines) < 2:
+            doc.close()
+            raise HTTPException(400, "Could not detect table borders in the zone")
+
+        # Table bounds from horizontal lines
+        h_ys = sorted(set(round(y, 1) for y, _, _ in h_lines))
+        # Table width from the widest horizontal line
+        table_x0 = min(x0 for _, x0, _ in h_lines)
+        table_x1 = max(x1 for _, _, x1 in h_lines)
+
+        # Filter out page-width lines (likely page frame, not table)
+        page_width = page.rect.width
+        if table_x1 - table_x0 > page_width * 0.8:
+            # Too wide — use text extent instead
+            text_x0, text_x1 = None, None
+            for block in raw.get("blocks", []):
+                if block.get("type") != 0:
+                    continue
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        bbox = span["bbox"]
+                        if min(h_ys) <= bbox[1] <= max(h_ys):
+                            if text_x0 is None or bbox[0] < text_x0:
+                                text_x0 = bbox[0]
+                            if text_x1 is None or bbox[2] > text_x1:
+                                text_x1 = bbox[2]
+            if text_x0 is not None:
+                table_x0 = text_x0 - 6
+                table_x1 = text_x1 + 6
+
+        table_y0 = min(h_ys)
+        original_table_y1 = max(h_ys)
+
+        # Determine row height from existing table
+        h_gaps = [h_ys[i+1] - h_ys[i] for i in range(len(h_ys) - 1)]
+        row_height = sum(h_gaps) / len(h_gaps) if h_gaps else 14.0
+
+        # Get font info from existing table spans
+        font_name = "TimesNewRoman"
+        font_size = 12.0
+        text_color = (0, 0, 0)
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    bbox = span["bbox"]
+                    if req.y_min <= bbox[1] <= req.y_max:
+                        font_name = span.get("font", "TimesNewRoman")
+                        font_size = span.get("size", 12.0)
+                        # Convert integer color to RGB tuple
+                        raw_color = span.get("color", 0)
+                        if isinstance(raw_color, int) and raw_color > 0:
+                            r = ((raw_color >> 16) & 0xFF) / 255.0
+                            g = ((raw_color >> 8) & 0xFF) / 255.0
+                            b = (raw_color & 0xFF) / 255.0
+                            text_color = (r, g, b)
+                        break
+
+        # Step 2: Compute new table dimensions
+        new_table_y1 = table_y0 + row_height * num_rows
+        height_delta = new_table_y1 - original_table_y1
+
+        # Column positions: equal-width division of the table
+        # This is stable across rebuilds (no dependency on detected vertical borders)
+        col_width = (table_x1 - table_x0) / num_cols
+        col_xs = [table_x0 + i * col_width for i in range(num_cols + 1)]
+
+        # Step 3: Backup the working copy before modification (for undo)
+        import shutil
+        backup_path = source_path + ".undo_backup"
+        doc.close()
+        shutil.copy2(source_path, backup_path)
+        doc = fitz.open(source_path)
+        page = doc[page_number - 1]
+
+        # Step 4: Redact the table zone (text + borders inside the grid)
+        # Start redaction just below the caption (which ends ~2pt above table_y0)
+        # but above the first data row. This preserves the caption title.
+        redact_y_start = table_y0 - 0.5  # Just above the top border line
+        redact_rect = fitz.Rect(table_x0 - 2, redact_y_start, table_x1 + 2, original_table_y1 + 2)
+        page.add_redact_annot(redact_rect, fill=(1, 1, 1))
+        page.apply_redactions()
+
+        # Step 5: If new table is taller/shorter, shift content below
+        if height_delta > 0.5:
+            _shift_below(page, raw, original_table_y1, height_delta)
+        elif height_delta < -0.5:
+            _shift_below(page, raw, original_table_y1, height_delta)  # negative shift = move up
+
+        # Step 6: Draw new table borders
+        border_w = 0.48
+
+        # Horizontal borders (top of each row + bottom)
+        for i in range(num_rows + 1):
+            y = table_y0 + i * row_height
+            page.draw_rect(
+                fitz.Rect(table_x0, y, table_x1, y + border_w),
+                fill=(0, 0, 0), color=None, width=0,
+            )
+
+        # Vertical borders at original column positions
+        for x in col_xs:
+            page.draw_rect(
+                fitz.Rect(x, table_y0, x + border_w, new_table_y1),
+                fill=(0, 0, 0), color=None, width=0,
+            )
+
+        # Step 7: Insert cell text (using extracted font when available)
+        for row_idx, row_data in enumerate(req.data):
+            for col_idx, cell_text in enumerate(row_data):
+                if col_idx >= num_cols:
+                    break
+                if not cell_text.strip():
+                    continue
+
+                # Cell center
+                cell_x0 = col_xs[col_idx]
+                cell_x1 = col_xs[col_idx + 1]
+                cell_center_x = (cell_x0 + cell_x1) / 2
+                baseline_y = table_y0 + row_idx * row_height + row_height * 0.65
+
+                # Center text horizontally using real font metrics
+                text_width = _get_text_width(cell_text, font_name, font_size)
+                insert_x = cell_center_x - text_width / 2
+
+                _insert_text_with_font(
+                    page, fitz.Point(insert_x, baseline_y),
+                    cell_text, font_name, font_size, color=text_color,
+                )
+
+        # Step 7: Save
+        doc.save(source_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+        doc.close()
+
+        # Step 8: Update Document IR
+        if doc_ir and page_number <= len(doc_ir.pages):
+            page_info = doc_ir.pages[page_number - 1]
+            for block in page_info.text_blocks:
+                if (block.bbox.y0 >= req.y_min - 20
+                        and block.bbox.y1 <= req.y_max + 20):
+                    old_text = block.text_verbatim
+                    new_text = "\n".join(
+                        "\t".join(row) for row in req.data
+                    )
+                    block.text_verbatim = new_text
+                    block.bbox.y1 = new_table_y1
+
+                    session.record(
+                        ActionType.BLOCK_EDITED,
+                        page=page_number,
+                        block_id=block.id,
+                        data={
+                            "operation": "table_rebuild",
+                            "old_text": old_text,
+                            "new_text": new_text,
+                        },
+                    )
+                    break
+
+        return {
+            "status": "rebuilt",
+            "page": page_number,
+            "rows": num_rows,
+            "columns": num_cols,
+            "height_delta": round(height_delta, 1),
+        }
+
+    def _shift_below(page, raw, y_threshold: float, shift_amount: float):
+        """Shift text content below y_threshold by shift_amount (positive=down, negative=up)."""
+        import fitz
+
+        page_height = page.rect.height
+        spans_to_shift = []
+
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    bbox = span["bbox"]
+                    if bbox[1] > y_threshold + 2 and bbox[1] < page_height - 55:
+                        chars = span.get("chars", [])
+                        text = "".join(c["c"] for c in chars).strip()
+                        if text:
+                            spans_to_shift.append({
+                                "text": text,
+                                "x0": bbox[0],
+                                "y0": bbox[1],
+                                "x1": bbox[2],
+                                "y1": bbox[3],
+                                "font": span.get("font", "TimesNewRoman"),
+                                "size": span.get("size", 12.0),
+                                "flags": span.get("flags", 0),
+                            })
+
+        if not spans_to_shift:
+            return
+
+        # Redact
+        for span in spans_to_shift:
+            r = fitz.Rect(span["x0"] - 1, span["y0"] - 1, span["x1"] + 1, span["y1"] + 1)
+            page.add_redact_annot(r, fill=(1, 1, 1))
+        page.apply_redactions()
+
+        # Rewrite shifted
+        for span in spans_to_shift:
+            font_size = span["size"]
+            baseline_y = span["y1"] - font_size * 0.18 + shift_amount
+            bold = bool(span["flags"] & 2**4)
+            bold = bool(span["flags"] & 2**4)
+            italic = bool(span["flags"] & 2**1)
+
+            _insert_text_with_font(
+                page, fitz.Point(span["x0"], baseline_y),
+                span["text"], span["font"], font_size, bold, italic,
+            )
 
 
     @app.get("/document/page/{page_number}/image")
@@ -962,15 +1379,27 @@ def create_app() -> FastAPI:
         if not session or not session.document_path:
             raise HTTPException(404, "No document loaded")
 
-        source_path = session.document_path
+        source_path = _get_source_path()
         doc = fitz.open(source_path)
         if page_number < 1 or page_number > len(doc):
             doc.close()
             raise HTTPException(400, f"Invalid page: {page_number}")
 
         # Check if this page has been edited by comparing IR text to source
+        # If a table rebuild was performed, the working copy already has the correct
+        # content — render it directly without additional patching.
         page_edited = False
-        if doc_ir and page_number <= len(doc_ir.pages):
+        has_table_rebuild = False
+        if session:
+            from src.api.session import ActionType as _AT
+            for action in session.undo_stack:
+                if action.page == page_number and action.data.get("operation") in (
+                    "table_rebuild", "toc_add", "toc_delete", "header_footer_edit"
+                ):
+                    has_table_rebuild = True
+                    break
+
+        if not has_table_rebuild and doc_ir and page_number <= len(doc_ir.pages):
             page_idx = page_number - 1
             source_text = doc[page_idx].get_text("text")
             ir_text = "\n".join(
@@ -1127,11 +1556,19 @@ def create_app() -> FastAPI:
         output_path = out.reconstructed_pdf_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        source_path = session.document_path
+        source_path = _get_source_path()
 
         # Determine which pages have edits
+        # Skip pages with table_rebuild (working copy already correct)
+        _rebuild_pages = set()
+        for _a in session.undo_stack:
+            if _a.data.get("operation") in ("table_rebuild", "toc_add", "toc_delete", "header_footer_edit") and _a.page:
+                _rebuild_pages.add(_a.page)
+
         pages_with_edits: dict[int, list[dict]] = {}
         for page_num in range(1, doc_ir.page_count + 1):
+            if page_num in _rebuild_pages:
+                continue
             edits = get_page_edits_from_session(session, doc_ir, page_num)
             if edits:
                 pages_with_edits[page_num] = edits
@@ -1212,7 +1649,7 @@ def create_app() -> FastAPI:
         if not session or not session.document_path:
             raise HTTPException(404, "No document loaded")
 
-        doc = fitz.open(session.document_path)
+        doc = fitz.open(_get_source_path())
         if page_number < 1 or page_number > len(doc):
             doc.close()
             raise HTTPException(400, f"Invalid page: {page_number}")
@@ -1275,7 +1712,7 @@ def create_app() -> FastAPI:
         if not session or not session.document_path:
             raise HTTPException(404, "No document loaded")
 
-        doc = fitz.open(session.document_path)
+        doc = fitz.open(_get_source_path())
         if page_number < 1 or page_number > len(doc):
             doc.close()
             raise HTTPException(400, f"Invalid page: {page_number}")
@@ -1639,7 +2076,7 @@ def create_app() -> FastAPI:
         if not session or not session.document_path:
             raise HTTPException(404, "No document loaded")
 
-        doc = fitz.open(session.document_path)
+        doc = fitz.open(_get_source_path())
         if page_number < 1 or page_number > len(doc):
             doc.close()
             raise HTTPException(400, f"Invalid page: {page_number}")
@@ -1669,9 +2106,9 @@ def create_app() -> FastAPI:
 
                     # Check if this span has leader dots
                     if text.count(".") > 5:
-                        # Parse: "Section Title.............page_num"
-                        # Split at the dot sequence
-                        match = re.match(r"^(.+?)\.{3,}\s*(\d+)?\s*$", text)
+                        # Parse: "Section Title.............page_ref"
+                        # Page ref can be digits or Roman numerals (i, ii, iii, iv)
+                        match = re.match(r"^(.+?)\.{3,}\s*([ivxlcdmIVXLCDM\d]+)?\s*$", text)
                         if match:
                             title = match.group(1).strip()
                             page_num = match.group(2) or ""
@@ -1682,8 +2119,8 @@ def create_app() -> FastAPI:
                                 "indent": span["bbox"][0] - 90,  # indent level
                             })
                         else:
-                            # Dots but no page number parse — might end with dots
-                            title = re.sub(r"\.{3,}\s*$", "", text).strip()
+                            # Dots but no page ref parse — strip all trailing dots
+                            title = re.sub(r"\.{3,}.*$", "", text).strip()
                             if title:
                                 entries.append({
                                     "title": title,
@@ -1839,6 +2276,154 @@ def create_app() -> FastAPI:
             "new_page_ref": new_page_ref,
         }
 
+    @app.post("/document/page/{page_number}/toc")
+    def add_toc_entry(page_number: int, title: str = "New Section", page_ref: str = "", after_index: int = -1):
+        """Add a new TOC entry to the page.
+
+        Inserts the entry text (with leader dots and page number) onto the PDF
+        working copy at the appropriate y-position.
+        """
+        import fitz
+
+        session = state["session"]
+        doc_ir = state["document_ir"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        # Get current TOC to determine insertion position
+        toc_res = get_toc(page_number)
+        if not toc_res["is_toc"]:
+            raise HTTPException(400, f"Page {page_number} is not a TOC page")
+
+        entries = toc_res["entries"]
+
+        # Determine y-position for new entry
+        if after_index >= 0 and after_index < len(entries):
+            # Insert after specified entry
+            insert_y = entries[after_index]["y"] + 14.0
+        elif entries:
+            # Append at the end
+            insert_y = entries[-1]["y"] + 14.0
+        else:
+            insert_y = 80.0  # Default start
+
+        # Build the TOC line text: "Title...........page_ref"
+        dots_needed = 60 - len(title) - len(page_ref)
+        dots = "." * max(dots_needed, 3)
+        full_line = f"{title}{dots}{page_ref}" if page_ref else title
+
+        # Backup the working copy before modification (for undo)
+        import shutil as _shutil
+        source_path = _get_source_path()
+        backup_path = source_path + ".undo_backup"
+        _shutil.copy2(source_path, backup_path)
+
+        # Write to the working copy
+        doc = fitz.open(source_path)
+        page = doc[page_number - 1]
+
+        # Get font info from existing TOC entries
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        font_name = "TimesNewRoman"
+        font_size = 12.0
+        insert_x = 90.0
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    if 60 < span["bbox"][1] < 700 and span.get("size", 0) <= 13:
+                        font_name = span.get("font", "TimesNewRoman")
+                        font_size = span.get("size", 12.0)
+                        insert_x = span["bbox"][0]
+                        break
+
+        from src.rendering.page_patch import _get_pymupdf_fontname
+        baseline_y = insert_y + font_size * 0.8
+
+        _insert_text_with_font(
+            page, fitz.Point(insert_x, baseline_y),
+            full_line, font_name, font_size,
+        )
+
+        doc.save(source_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+        doc.close()
+
+        # Record in session
+        if session:
+            session.record(
+                ActionType.BLOCK_EDITED,
+                page=page_number,
+                block_id=None,
+                data={
+                    "operation": "toc_add",
+                    "title": title,
+                    "page_ref": page_ref,
+                    "y": insert_y,
+                },
+            )
+
+        return {"status": "added", "title": title, "page_ref": page_ref, "y": insert_y}
+
+    @app.delete("/document/page/{page_number}/toc")
+    def delete_toc_entry(page_number: int, index: int):
+        """Delete a TOC entry by redacting its text from the page."""
+        import fitz
+
+        session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        # Get current entries to find the one to delete
+        toc_res = get_toc(page_number)
+        if not toc_res["is_toc"]:
+            raise HTTPException(400, f"Page {page_number} is not a TOC page")
+
+        entries = toc_res["entries"]
+        if index < 0 or index >= len(entries):
+            raise HTTPException(400, f"Invalid index: {index}")
+
+        entry = entries[index]
+        old_title = entry["title"]
+
+        # Backup the working copy before modification (for undo)
+        import shutil as _shutil
+        source_path = _get_source_path()
+        backup_path = source_path + ".undo_backup"
+        _shutil.copy2(source_path, backup_path)
+
+        # Find and redact the entry on the working copy
+        doc = fitz.open(source_path)
+        page = doc[page_number - 1]
+
+        # Search for the title text on the page
+        instances = page.search_for(old_title)
+        if instances:
+            # Redact the found rect (covers title + dots + page number)
+            rect = instances[0]
+            # Expand rect to cover the full line width
+            redact_rect = fitz.Rect(rect.x0 - 2, rect.y0 - 1, 530, rect.y1 + 1)
+            page.add_redact_annot(redact_rect, fill=(1, 1, 1))
+            page.apply_redactions()
+
+        doc.save(source_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+        doc.close()
+
+        # Record in session
+        if session:
+            session.record(
+                ActionType.BLOCK_EDITED,
+                page=page_number,
+                block_id=None,
+                data={
+                    "operation": "toc_delete",
+                    "title": old_title,
+                    "page_ref": entry.get("page_ref", ""),
+                    "index": index,
+                },
+            )
+
+        return {"status": "deleted", "title": old_title}
 
 
     @app.get("/document/page/{page_number}/header-footer")
@@ -1907,6 +2492,111 @@ def create_app() -> FastAPI:
             "footer": footers,
         }
 
+    @app.put("/document/page/{page_number}/header-footer")
+    def edit_header_footer(page_number: int, section: str, alignment: str, new_text: str):
+        """Edit a header or footer span on the working copy.
+
+        Args:
+            section: "header" or "footer"
+            alignment: "left", "center", or "right"
+            new_text: replacement text
+        """
+        import fitz
+
+        session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        if section not in ("header", "footer"):
+            raise HTTPException(400, "section must be 'header' or 'footer'")
+        if alignment not in ("left", "center", "right"):
+            raise HTTPException(400, "alignment must be 'left', 'center', or 'right'")
+
+        # Get the current entry to find old text
+        hf_data = get_header_footer(page_number)
+        entries = hf_data[section]
+        old_entry = next((e for e in entries if e["alignment"] == alignment), None)
+        if not old_entry:
+            raise HTTPException(404, f"No {alignment} {section} found on page {page_number}")
+
+        old_text = old_entry["text"]
+        if old_text == new_text:
+            return {"status": "unchanged"}
+
+        # Backup for undo
+        import shutil as _shutil
+        source_path = _get_source_path()
+        backup_path = source_path + ".undo_backup"
+        _shutil.copy2(source_path, backup_path)
+
+        # Patch the working copy: find old text, redact, insert new
+        doc = fitz.open(source_path)
+        page = doc[page_number - 1]
+
+        instances = page.search_for(old_text)
+        if not instances:
+            doc.close()
+            raise HTTPException(404, f"Could not find '{old_text}' on page")
+
+        rect = instances[0]
+
+        # Get font info from the original span
+        raw = page.get_text("rawdict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        font_name = "TimesNewRoman"
+        font_size = 12.0
+        for block in raw.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    chars = span.get("chars", [])
+                    span_text = "".join(c["c"] for c in chars).strip()
+                    if span_text == old_text:
+                        font_name = span.get("font", "TimesNewRoman")
+                        font_size = span.get("size", 12.0)
+                        break
+
+        # Redact old text
+        page.add_redact_annot(rect, fill=(1, 1, 1))
+        page.apply_redactions()
+
+        # Insert new text at same position using extracted font
+        baseline_y = rect.y1 - font_size * 0.18
+
+        # Preserve alignment: left stays at x0, center/right need calculation
+        if alignment == "left":
+            insert_x = rect.x0
+        elif alignment == "center":
+            text_width = _get_text_width(new_text, font_name, font_size)
+            original_center = (rect.x0 + rect.x1) / 2
+            insert_x = original_center - text_width / 2
+        else:  # right
+            text_width = _get_text_width(new_text, font_name, font_size)
+            insert_x = rect.x1 - text_width
+
+        _insert_text_with_font(
+            page, fitz.Point(insert_x, baseline_y),
+            new_text, font_name, font_size,
+        )
+
+        doc.save(source_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+        doc.close()
+
+        # Record session action
+        session.record(
+            ActionType.BLOCK_EDITED,
+            page=page_number,
+            block_id=None,
+            data={
+                "operation": "header_footer_edit",
+                "section": section,
+                "alignment": alignment,
+                "old_text": old_text,
+                "new_text": new_text,
+            },
+        )
+
+        return {"status": "updated", "old_text": old_text, "new_text": new_text}
 
 
     @app.get("/document/requirements")
@@ -2053,6 +2743,8 @@ def create_app() -> FastAPI:
     @app.post("/document/undo")
     def undo():
         """Undo the last edit."""
+        import shutil
+
         session = state["session"]
         doc_ir = state["document_ir"]
         if not session or not doc_ir:
@@ -2065,6 +2757,21 @@ def create_app() -> FastAPI:
         old_text = action.data.get("old_text", "")
         new_text = action.data.get("new_text", "")
         block_id = action.block_id
+
+        # If this was a table rebuild or TOC modification, restore the PDF backup
+        if action.data.get("operation") in ("table_rebuild", "toc_add", "toc_delete", "header_footer_edit"):
+            source_path = _get_source_path()
+            backup_path = source_path + ".undo_backup"
+            if Path(backup_path).exists():
+                shutil.copy2(backup_path, source_path)
+            # For operations without a block_id, the PDF restore IS the undo
+            if not block_id:
+                return {
+                    "status": "undone",
+                    "block_id": None,
+                    "page": action.page,
+                    "restored_text": f"Reverted {action.data.get('operation')}",
+                }
 
         # Find the block and reverse the edit
         for page in doc_ir.pages:
@@ -2116,6 +2823,43 @@ def create_app() -> FastAPI:
 
         return {"status": "redone", "block_id": block_id, "page": None}
 
+    # ─── Save ─────────────────────────────────────────────────────
+
+    @app.post("/document/save")
+    def save_document():
+        """Save the working copy back to the original file.
+
+        This is the explicit "File > Save" action. Until this is called,
+        the original PDF on disk is untouched. All edits (table rows,
+        text patches) live only in the working copy.
+        """
+        import shutil
+
+        session = state["session"]
+        if not session or not session.document_path:
+            raise HTTPException(404, "No document loaded")
+
+        working_copy = state.get("working_copy_path")
+        if not working_copy or not Path(working_copy).exists():
+            raise HTTPException(400, "No working copy to save")
+
+        original_path = Path(session.document_path)
+
+        # Copy working copy over the original
+        shutil.copy2(working_copy, str(original_path))
+
+        # Record the save action
+        session.record(
+            ActionType.DOCUMENT_SAVED,
+            data={"path": str(original_path)},
+        )
+
+        return {
+            "status": "saved",
+            "path": str(original_path),
+            "message": f"Saved to {original_path.name}",
+        }
+
     # ─── Export ────────────────────────────────────────────────────
 
     @app.post("/document/export")
@@ -2142,11 +2886,19 @@ def create_app() -> FastAPI:
         output_path = out.reconstructed_pdf_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        source_path = session.document_path
+        source_path = _get_source_path()
 
         # Determine which pages have edits
+        # Skip pages with table_rebuild (working copy already correct)
+        _rebuild_pages = set()
+        for _a in session.undo_stack:
+            if _a.data.get("operation") in ("table_rebuild", "toc_add", "toc_delete", "header_footer_edit") and _a.page:
+                _rebuild_pages.add(_a.page)
+
         pages_with_edits: dict[int, list[dict]] = {}
         for page_num in range(1, doc_ir.page_count + 1):
+            if page_num in _rebuild_pages:
+                continue
             edits = get_page_edits_from_session(session, doc_ir, page_num)
             if edits:
                 pages_with_edits[page_num] = edits
@@ -2283,6 +3035,40 @@ def create_app() -> FastAPI:
         return cost
 
     # ─── Search & RAG ────────────────────────────────────────────────
+
+    @app.get("/search/models")
+    def get_search_models():
+        """Return available search models with descriptions and benchmark scores."""
+        from src.search.config import ALL_CONFIGS
+
+        models = []
+        for cfg in ALL_CONFIGS:
+            provider = cfg.embedding_config.provider.value
+            cost = cfg.embedding_config.cost_per_1k_tokens
+            strategy = cfg.chunk_config.strategy.value
+
+            # Friendly descriptions
+            if "titan" in provider and "v2" in provider:
+                desc = "Best balance of quality and cost"
+            elif "titan" in provider and "v1" in provider:
+                desc = "Cheapest option, slightly lower accuracy"
+            elif "cohere" in provider and "english" in provider:
+                desc = "Strong on synonyms and paraphrasing"
+            elif "cohere" in provider and "multilingual" in provider:
+                desc = "Best for non-English content"
+            else:
+                desc = "Standard embedding model"
+
+            models.append({
+                "id": cfg.name,
+                "provider": provider,
+                "strategy": strategy,
+                "description": desc,
+                "cost_per_1k_tokens": cost,
+                "dimensions": cfg.embedding_config.dimensions,
+            })
+
+        return {"models": models, "default": "titan-v2-sliding"}
 
     @app.get("/search/evaluation-suite")
     def get_evaluation_suite():
@@ -2427,9 +3213,13 @@ def create_app() -> FastAPI:
         return findings
 
     @app.post("/search")
-    def search_documents(query: str, k: int = 10, mode: str = "rrf", rag: bool = False):
-        """Search across indexed ICD documents, optionally with RAG."""
-        from src.search.config import SearchConfig, TITAN_V2_SLIDING
+    def search_documents(query: str, k: int = 10, mode: str = "rrf", rag: bool = False, model: str = ""):
+        """Search across indexed ICD documents, optionally with RAG.
+
+        model: optional config name (e.g. "titan-v2-sliding", "cohere-en-paragraph").
+               Empty string = use best config from evaluation.
+        """
+        from src.search.config import SearchConfig, ALL_CONFIGS, TITAN_V2_SLIDING
         from src.search.retrieval import RetrievalMode
 
         mode_map = {
@@ -2439,6 +3229,14 @@ def create_app() -> FastAPI:
             "rrf": RetrievalMode.HYBRID_RRF,
         }
         retrieval_mode = mode_map.get(mode, RetrievalMode.HYBRID_RRF)
+
+        # Select the index config based on model parameter
+        selected_config = TITAN_V2_SLIDING  # default
+        if model:
+            for cfg in ALL_CONFIGS:
+                if cfg.name == model:
+                    selected_config = cfg
+                    break
 
         search_config = SearchConfig(
             opensearch_host=os.environ.get("OPENSEARCH_HOST", "localhost"),

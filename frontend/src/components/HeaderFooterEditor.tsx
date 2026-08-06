@@ -18,7 +18,7 @@ interface HFData {
   footer: HFEntry[];
 }
 
-export function HeaderFooterEditor() {
+export function HeaderFooterEditor({ section }: { section?: "header" | "footer" }) {
   const currentPage = useEditorStore((s) => s.currentPage);
   const totalPages = useEditorStore((s) => s.totalPages);
   const [hfData, setHfData] = useState<HFData | null>(null);
@@ -42,7 +42,7 @@ export function HeaderFooterEditor() {
     setEditText(text);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editing || !hfData) return;
     // Update locally
     const newData = { ...hfData };
@@ -54,7 +54,31 @@ export function HeaderFooterEditor() {
       newData.footer[editing.index] = { ...newData.footer[editing.index], text: editText };
     }
     setHfData(newData);
-    // TODO: persist to backend
+    // Persist to backend
+    const entry = editing.section === "header"
+      ? hfData.header[editing.index]
+      : hfData.footer[editing.index];
+    if (entry) {
+      try {
+        const params = new URLSearchParams({
+          section: editing.section,
+          alignment: entry.alignment,
+          new_text: editText,
+        });
+        const res = await fetch(
+          `${API_BASE}/document/page/${currentPage}/header-footer?${params.toString()}`,
+          { method: "PUT" }
+        );
+        if (res.ok) {
+          useEditorStore.setState((s) => ({
+            refreshTrigger: s.refreshTrigger + 1,
+            editCount: s.editCount + 1,
+          }));
+        }
+      } catch (e) {
+        console.error("Header/footer edit failed:", e);
+      }
+    }
     setEditing(null);
   };
 
@@ -119,7 +143,7 @@ export function HeaderFooterEditor() {
 
   return (
     <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
-      {hfData.header.length > 0 && (
+      {(!section || section === "header") && hfData.header.length > 0 && (
         <div style={{ marginBottom: "6px" }}>
           <div style={{ fontSize: "10px", fontWeight: "bold", color: "var(--text-secondary)", marginBottom: "2px" }}>
             HEADER
@@ -127,7 +151,7 @@ export function HeaderFooterEditor() {
           {renderEntries(hfData.header, "header")}
         </div>
       )}
-      {hfData.footer.length > 0 && (
+      {(!section || section === "footer") && hfData.footer.length > 0 && (
         <div>
           <div style={{ fontSize: "10px", fontWeight: "bold", color: "var(--text-secondary)", marginBottom: "2px" }}>
             FOOTER

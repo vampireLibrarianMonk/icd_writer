@@ -63,6 +63,9 @@ export function SessionPanel() {
 
   return (
     <div style={{ padding: "12px", overflow: "auto", height: "100%" }}>
+      <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
+        View the timeline of all actions in your current editing session. Every edit, undo, save, and export is recorded here. Use Session menu to save or restore sessions.
+      </p>
       <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "12px" }}>
         <strong>Session:</strong> {journal.session_id}<br />
         <strong>Document:</strong> {journal.document.split("/").pop() || "none"}<br />

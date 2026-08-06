@@ -218,6 +218,9 @@ export function TBDDashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "12px", overflow: "hidden" }}>
+      <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
+        Track all open TBD, TBR, and TBC items across the loaded document. Click any item to navigate to its location in the PDF. Update status as items are resolved.
+      </p>
       {/* Header */}
       <div style={{ marginBottom: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

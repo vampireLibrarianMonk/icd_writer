@@ -179,7 +179,38 @@ export function DocumentView() {
         </span>
         <span style={{ borderLeft: "1px solid #ccc", height: "16px" }} />
         <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}>◀</button>
-        <span>Page {currentPage} / {totalPages}</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
+          Page{" "}
+          <input
+            type="text"
+            value={currentPage}
+            onChange={(e) => {
+              const val = parseInt(e.target.value, 10);
+              if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                goToPage(val);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const val = parseInt((e.target as HTMLInputElement).value, 10);
+                if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                  goToPage(val);
+                }
+              }
+            }}
+            style={{
+              width: "32px",
+              textAlign: "center",
+              border: "1px solid var(--border, #ccc)",
+              borderRadius: "3px",
+              padding: "1px 2px",
+              fontSize: "12px",
+              background: "var(--input-bg, #fff)",
+              color: "var(--text-primary)",
+            }}
+          />
+          {" "}/ {totalPages}
+        </span>
         <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages}>▶</button>
       </div>
 
@@ -319,6 +350,7 @@ export function DocumentView() {
               autoFocus
             />
           )}
+
         </div>
       </div>
     </div>

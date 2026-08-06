@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "../api/client";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 interface Citation {
   label: string;
   document_title: string;
@@ -51,7 +53,22 @@ export function SearchPanel() {
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState("");
+  const [availableModels, setAvailableModels] = useState<any[]>([]);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  // Load available models
+  useEffect(() => {
+    fetch(`${API_BASE}/search/models`)
+      .then((r) => r.json())
+      .then((data) => {
+        setAvailableModels(data.models || []);
+        if (!selectedModel && data.default) {
+          setSelectedModel(data.default);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (resultsRef.current) {
@@ -65,7 +82,7 @@ export function SearchPanel() {
     setError(null);
 
     try {
-      const result = await api.search(query.trim(), 8, "rrf", useRag);
+      const result = await api.search(query.trim(), 8, "rrf", useRag, selectedModel);
       setHistory((prev) => [...prev, { query: query.trim(), result }]);
       setQuery("");
     } catch (e) {
@@ -84,6 +101,39 @@ export function SearchPanel() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "12px" }}>
+      <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
+        Search across all indexed documents using natural language questions. Results are ranked by relevance and include page references you can navigate to directly.
+      </p>
+      {/* Model selector */}
+      {availableModels.length > 0 && (
+        <div style={{ marginBottom: "10px", padding: "6px 8px", background: "var(--bg-secondary)", borderRadius: "4px", border: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <label style={{ fontSize: "11px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Search model:</label>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              style={{
+                flex: 1,
+                fontSize: "11px",
+                padding: "2px 6px",
+                borderRadius: "3px",
+                border: "1px solid var(--border)",
+                background: "var(--input-bg, #fff)",
+                color: "var(--text-primary)",
+              }}
+            >
+              {availableModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id} — {m.description}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p style={{ fontSize: "10px", color: "var(--text-muted)", margin: "4px 0 0", lineHeight: 1.3 }}>
+            Each model interprets your question differently. Documents are indexed with all models when uploaded. Changing this searches a different index of the same documents.
+          </p>
+        </div>
+      )}
       {/* Header */}
       <div style={{ marginBottom: "12px", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
@@ -121,16 +171,16 @@ export function SearchPanel() {
             <p>Try asking:</p>
             <ul style={{ listStyle: "none", padding: 0, margin: "8px 0" }}>
               <li style={{ margin: "4px 0", cursor: "pointer", color: "var(--accent)" }}
-                  onClick={() => setQuery("What are the thermal limits for the spectrometer?")}>
-                "What are the thermal limits for the spectrometer?"
-              </li>
-              <li style={{ margin: "4px 0", cursor: "pointer", color: "var(--accent)" }}
-                  onClick={() => setQuery("Who is responsible for the thermal design?")}>
-                "Who is responsible for the thermal design?"
+                  onClick={() => setQuery("What are the interface requirements?")}>
+                "What are the interface requirements?"
               </li>
               <li style={{ margin: "4px 0", cursor: "pointer", color: "var(--accent)" }}
                   onClick={() => setQuery("What items are still TBD?")}>
                 "What items are still TBD?"
+              </li>
+              <li style={{ margin: "4px 0", cursor: "pointer", color: "var(--accent)" }}
+                  onClick={() => setQuery("What connectors or signals are defined?")}>
+                "What connectors or signals are defined?"
               </li>
             </ul>
           </div>

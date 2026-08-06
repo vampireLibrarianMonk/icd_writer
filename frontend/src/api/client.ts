@@ -145,13 +145,14 @@ export const api = {
     return res.json();
   },
 
-  async search(query: string, k: number = 10, mode: string = "rrf", rag: boolean = false): Promise<any> {
+  async search(query: string, k: number = 10, mode: string = "rrf", rag: boolean = false, model: string = ""): Promise<any> {
     const params = new URLSearchParams({
       query,
       k: String(k),
       mode,
       rag: String(rag),
     });
+    if (model) params.set("model", model);
     const res = await fetch(`${API_BASE}/search?${params}`, { method: "POST" });
     return res.json();
   },

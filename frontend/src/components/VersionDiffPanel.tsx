@@ -146,6 +146,9 @@ export function VersionDiffPanel() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "12px", overflow: "hidden" }}>
+      <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
+        Compare two revisions of the same document side by side. See what sections were added, modified, or removed between versions, including TBD resolution tracking.
+      </p>
       <div style={{ marginBottom: "12px" }}>
         <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600 }}>Version Diff</h3>
         <p style={{ margin: "4px 0 0", fontSize: "11px", color: "var(--text-secondary)" }}>

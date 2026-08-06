@@ -2,6 +2,7 @@ import { useEditorStore } from "../store/editorStore";
 import { useState, useEffect } from "react";
 import { TocEditor } from "./TocEditor";
 import { TableEditor } from "./TableEditor";
+import { HeaderFooterEditor } from "./HeaderFooterEditor";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -18,7 +19,6 @@ export function UnifiedEditor({ width }: { width: number }) {
   const [selected, setSelected] = useState<ClickableElement | null>(null);
   const [editText, setEditText] = useState("");
   const [isTocPage, setIsTocPage] = useState(false);
-  const [isTablePage, setIsTablePage] = useState(false);
   const [selectedTableZone, setSelectedTableZone] = useState<{ yMin: number; yMax: number; label: string } | null>(null);
   const currentPage = useEditorStore((s) => s.currentPage);
 
@@ -97,9 +97,8 @@ export function UnifiedEditor({ width }: { width: number }) {
       .then((r) => r.json())
       .then((data) => {
         setIsTocPage(data.page_type === "table_of_contents");
-        setIsTablePage(data.page_type === "table");
       })
-      .catch(() => { setIsTocPage(false); setIsTablePage(false); });
+      .catch(() => { setIsTocPage(false); });
   }, [currentPage, documentLoaded]);
 
   if (!documentLoaded) {
@@ -112,16 +111,8 @@ export function UnifiedEditor({ width }: { width: number }) {
 
   if (isTocPage && !selected) {
     return (
-      <div style={{ width: `${width}px`, padding: "12px", background: "var(--bg-panel)", overflow: "auto" }}>
-        <TocEditor />
-      </div>
-    );
-  }
-
-  if (isTablePage && !selected && !selectedTableZone) {
-    return (
-      <div style={{ width: `${width}px`, padding: "16px", color: "var(--text-muted)", background: "var(--bg-panel)" }}>
-        Click a table area on the page to edit it, or click any other element.
+      <div style={{ width: `${width}px`, padding: "0", background: "var(--bg-panel)", overflow: "auto" }}>
+        <PageElementSelector currentPage={currentPage} defaultSection="toc" />
       </div>
     );
   }
@@ -145,8 +136,27 @@ export function UnifiedEditor({ width }: { width: number }) {
 
   if (!selected) {
     return (
-      <div style={{ width: `${width}px`, padding: "16px", color: "var(--text-muted)", background: "var(--bg-panel)" }}>
-        Click any element on the page to edit it.
+      <div style={{ width: `${width}px`, padding: "0", background: "var(--bg-panel)", overflow: "auto" }}>
+        <PageElementSelector currentPage={currentPage} />
+        <div style={{ padding: "16px", color: "var(--text-muted)" }}>
+          <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
+            Edit page content by clicking elements on the document. Use the dropdown above to edit headers, footers, tables, or table of contents entries. Changes are saved to a working copy until you use File &gt; Save Document.
+          </p>
+          Click any element on the page to edit it.
+        </div>
+      </div>
+    );
+  }
+
+  // Header/footer elements are edited via the selector panel, not the paragraph editor
+  const isHeaderFooter = selected.bbox.y0 < 60 || selected.bbox.y0 > 700;
+  if (isHeaderFooter) {
+    return (
+      <div style={{ width: `${width}px`, padding: "0", background: "var(--bg-panel)", overflow: "auto" }}>
+        <PageElementSelector currentPage={currentPage} defaultSection="footer" />
+        <div style={{ padding: "16px", color: "var(--text-muted)" }}>
+          Edit header/footer fields above.
+        </div>
       </div>
     );
   }
@@ -182,7 +192,11 @@ export function UnifiedEditor({ width }: { width: number }) {
   };
 
   return (
-    <div style={{ width: `${width}px`, padding: "16px", background: "var(--bg-panel)", overflow: "auto" }}>
+    <div style={{ width: `${width}px`, padding: "0", background: "var(--bg-panel)", overflow: "auto" }}>
+      {/* Dropdown selector for header/footer/tables */}
+      <PageElementSelector currentPage={currentPage} />
+
+      <div style={{ padding: "16px" }}>
       {/* Back button on special pages */}
       {isTocPage && (
         <button
@@ -273,6 +287,95 @@ export function UnifiedEditor({ width }: { width: number }) {
         {selected.id && <div><b>ID:</b> {selected.id}</div>}
         <div><b>Position:</b> ({selected.bbox.x0.toFixed(0)}, {selected.bbox.y0.toFixed(0)})</div>
       </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Page Element Selector (Header / Footer / Tables in one dropdown) ─── */
+
+function PageElementSelector({ currentPage, defaultSection }: { currentPage: number; defaultSection?: string }) {
+  const [activeSection, setActiveSection] = useState<string>(defaultSection || "");
+  const refreshTrigger = useEditorStore((s) => s.refreshTrigger);
+  const totalPages = useEditorStore((s) => s.totalPages);
+  const [hasHeader, setHasHeader] = useState(false);
+  const [hasFooter, setHasFooter] = useState(false);
+  const [tableZoneCount, setTableZoneCount] = useState(0);
+  const [hasToc, setHasToc] = useState(false);
+
+  // Detect what's on this page
+  useEffect(() => {
+    if (!totalPages || !currentPage) return;
+    // Check header/footer
+    fetch(`${API_BASE}/document/page/${currentPage}/header-footer`)
+      .then((r) => r.json())
+      .then((data) => {
+        setHasHeader((data.header || []).length > 0);
+        setHasFooter((data.footer || []).length > 0);
+      })
+      .catch(() => { setHasHeader(false); setHasFooter(false); });
+    // Check tables
+    fetch(`${API_BASE}/document/page/${currentPage}/table-zones`)
+      .then((r) => r.json())
+      .then((data) => setTableZoneCount((data.zones || []).length))
+      .catch(() => setTableZoneCount(0));
+    // Check TOC
+    fetch(`${API_BASE}/document/page/${currentPage}/toc`)
+      .then((r) => r.json())
+      .then((data) => setHasToc(data.is_toc || false))
+      .catch(() => setHasToc(false));
+  }, [currentPage, totalPages, refreshTrigger]);
+
+  // Auto-select based on defaultSection prop
+  useEffect(() => {
+    if (defaultSection) setActiveSection(defaultSection);
+  }, [defaultSection]);
+
+  // Build options
+  const options: { value: string; label: string }[] = [];
+  if (hasToc) options.push({ value: "toc", label: "Table of Contents" });
+  if (hasHeader) options.push({ value: "header", label: "Header" });
+  if (hasFooter) options.push({ value: "footer", label: "Footer" });
+  for (let i = 0; i < tableZoneCount; i++) {
+    options.push({ value: `table-${i}`, label: tableZoneCount > 1 ? `Table ${i + 1}` : "Table" });
+  }
+
+  if (options.length === 0) return null;
+
+  return (
+    <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
+      <select
+        value={activeSection}
+        onChange={(e) => setActiveSection(e.target.value)}
+        style={{
+          width: "100%",
+          fontSize: "12px",
+          padding: "4px 8px",
+          borderRadius: "4px",
+          border: "1px solid var(--border)",
+          background: "var(--input-bg, #fff)",
+          color: "var(--text-primary)",
+          marginBottom: "8px",
+        }}
+      >
+        <option value="">— Select section to edit —</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+
+      {activeSection === "header" && (
+        <HeaderFooterEditor section="header" />
+      )}
+      {activeSection === "footer" && (
+        <HeaderFooterEditor section="footer" />
+      )}
+      {activeSection === "toc" && (
+        <TocEditor />
+      )}
+      {activeSection.startsWith("table-") && (
+        <TableEditor />
+      )}
     </div>
   );
 }

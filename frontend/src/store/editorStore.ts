@@ -14,6 +14,10 @@ interface EditorState {
   selectedBlock: TextBlock | null;
   editText: string;
 
+  // Compare highlight (section heading to highlight on current page)
+  compareHighlight: string | null;
+  compareHighlightPage: number | null;
+
   // Session
   sessionId: string | null;
   editCount: number;
@@ -26,6 +30,7 @@ interface EditorState {
   goToPage: (page: number) => Promise<void>;
   selectBlock: (block: TextBlock | null) => void;
   setEditText: (text: string) => void;
+  setCompareHighlight: (heading: string | null, page?: number | null) => void;
   applyEdit: () => Promise<void>;
   revertEdit: () => void;
   undo: () => Promise<void>;
@@ -40,6 +45,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   pageData: null,
   selectedBlock: null,
   editText: "",
+  compareHighlight: null,
+  compareHighlightPage: null,
   sessionId: null,
   editCount: 0,
   refreshTrigger: 0,
@@ -86,6 +93,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setEditText: (text: string) => {
     set({ editText: text });
+  },
+
+  setCompareHighlight: (heading: string | null, page?: number | null) => {
+    set({ compareHighlight: heading, compareHighlightPage: page ?? null });
   },
 
   applyEdit: async () => {

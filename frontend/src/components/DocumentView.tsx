@@ -106,15 +106,56 @@ export function DocumentView() {
   // Listen for TBD navigation: highlight matching element on current page
   const [highlightText, setHighlightText] = useState<string | null>(null);
 
+  // Compare highlight overlay — driven by store, not events
+  const [compareHighlightIdx, setCompareHighlightIdx] = useState<number | null>(null);
+  const compareHighlight = useEditorStore((s) => s.compareHighlight);
+  const compareHighlightPage = useEditorStore((s) => s.compareHighlightPage);
+
   useEffect(() => {
     const handler = (e: CustomEvent) => {
       const { context } = e.detail;
-      // Store the context text to match against overlays
       setHighlightText(context);
     };
     window.addEventListener("navigate-to-tbd" as any, handler);
     return () => window.removeEventListener("navigate-to-tbd" as any, handler);
   }, []);
+
+  // Apply compare highlight when overlays load AND we're on the target page
+  useEffect(() => {
+    if (!compareHighlight || overlays.length === 0) return;
+    // Only apply when we're on the correct page
+    if (compareHighlightPage && compareHighlightPage !== currentPage) return;
+
+    const headingLower = compareHighlight.toLowerCase();
+    let bestIdx = -1;
+    let bestScore = 0;
+
+    for (let i = 0; i < overlays.length; i++) {
+      const ovText = overlays[i].text.toLowerCase();
+      if (ovText.includes(headingLower) || headingLower.includes(ovText.trim())) {
+        bestIdx = i;
+        bestScore = 1.0;
+        break;
+      }
+      const headingWords = headingLower.split(/\s+/).filter((w: string) => w.length > 2);
+      const matches = headingWords.filter((w: string) => ovText.includes(w)).length;
+      const score = headingWords.length > 0 ? matches / headingWords.length : 0;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+
+    if (bestIdx >= 0 && bestScore >= 0.3) {
+      setCompareHighlightIdx(bestIdx);
+      setSelectedIdx(null);
+      const el = document.querySelector(`[data-overlay-idx="${bestIdx}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Successfully matched — clear from store
+      useEditorStore.getState().setCompareHighlight(null);
+    }
+    // If no match, DON'T clear — we may be on the wrong page still
+  }, [overlays, compareHighlight, compareHighlightPage, currentPage]);
 
   // Once overlays load after navigation, find and highlight the matching one
   useEffect(() => {
@@ -248,6 +289,7 @@ export function DocumentView() {
             return (
             <div
               key={idx}
+              data-overlay-idx={idx}
               onClick={() => handleClick(idx)}
               style={{
                 position: "absolute",
@@ -257,11 +299,16 @@ export function DocumentView() {
                 height: `${(ov.bbox.y1 - ov.bbox.y0) * scale}px`,
                 border: selectedIdx === idx
                   ? "2px solid var(--accent)"
+                  : compareHighlightIdx === idx
+                  ? "2px solid #ff9800"
                   : "1px solid transparent",
                 background: selectedIdx === idx
                   ? "var(--accent-light)"
+                  : compareHighlightIdx === idx
+                  ? "rgba(255, 152, 0, 0.15)"
                   : "transparent",
                 cursor: "pointer",
+                transition: "background 0.2s, border 0.2s",
               }}
               onMouseEnter={(e) => {
                 if (selectedIdx !== idx) {

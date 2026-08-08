@@ -36,7 +36,7 @@ class TestNormalizeStem:
     """Filename stem normalization for family detection."""
 
     def test_strip_flat_suffix(self):
-        assert normalize_stem("HSI_SYS_015G_flattened.pdf") == "hsi_sys_015g"
+        assert normalize_stem("HSI_SYS_015G_flattened.pdf") == "hsi_sys_015"
 
     def test_strip_rev_suffix(self):
         assert normalize_stem("IDSS_IDD_RevF.pdf") == "idss_idd"
@@ -87,9 +87,9 @@ class TestFamilyDetection:
     def test_digital_flat_pair_detected(self):
         """Digital and flattened versions of same doc grouped."""
         families = detect_families(scan_dirs=[ICDS_DIR / "digital", ICDS_DIR / "flat"])
-        hsi_family = next((f for f in families if "hsi" in f.base_name), None)
-        assert hsi_family is not None
-        types = {v.doc_type for v in hsi_family.versions}
+        hsi_015_family = next((f for f in families if "hsi_sys_015" in f.base_name), None)
+        assert hsi_015_family is not None
+        types = {v.doc_type for v in hsi_015_family.versions}
         assert "digital" in types
         assert "flattened" in types
 

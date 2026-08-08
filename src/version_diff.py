@@ -119,6 +119,9 @@ def normalize_stem(filename: str) -> str:
     stem = re.sub(r'_\d{8}$', '', stem)
     # Strip trailing revision markers like _RevF
     stem = re.sub(r'_rev[a-z]$', '', stem, flags=re.IGNORECASE)
+    # Strip ICD-style revision suffix: number + single letter (e.g., 001H → 001)
+    # Pattern: document number ends with digits followed by a single revision letter
+    stem = re.sub(r'(\d{2,})[a-z]$', r'\1', stem)
     return stem
 
 
@@ -158,6 +161,10 @@ def detect_families(scan_dirs: list[Path | str] | None = None) -> list[DocumentF
             revision = _extract_revision(first_page_text)
             title = doc.metadata.get("title", "") or ""
             date = _extract_date(first_page_text)
+
+            # Fallback: extract revision from filename if text-based failed
+            if not revision:
+                revision = _extract_revision_from_filename(pdf_path.name)
 
             # Determine type
             doc_type = "flattened" if "flat" in scan_dir.name else "digital"
@@ -317,16 +324,55 @@ def full_diff(path_a: str | Path, path_b: str | Path) -> DiffReport:
 # -----------------------------------------------------------------
 
 def _extract_sections(pdf_path: Path) -> list[dict[str, Any]]:
-    """Extract text organized by sections (headings)."""
+    """Extract text organized by sections (headings).
+
+    Heading detection rules:
+    1. Numbered section headings: "1.", "1.1", "4.1.2.3 Title Text"
+       - Must start with a section number pattern
+       - Must be followed by alphabetic title text (not units/values)
+    2. All-caps titles: "INTRODUCTION", "DOCUMENT REVISION RECORD"
+       - Must be >= 6 chars, all uppercase letters/spaces
+       - Must NOT start with bullet points or special chars
+    3. Large font (>14pt) short text that looks like a title
+       - Must contain at least one letter
+       - Must NOT be a measurement value or data entry
+    """
     doc = fitz.open(str(pdf_path))
     sections: list[dict[str, Any]] = []
     current_heading = "Preamble"
     current_text_parts: list[str] = []
     current_page = 1
 
-    heading_pattern = re.compile(
-        r'^(\d+(?:\.\d+)*)\s+(.+)$|^([A-Z][A-Z\s]{5,})$'
+    # Numbered section: "1. Introduction" or "4.1.2.3 Title"
+    # Requires the text after the number to start with a letter (not a digit/unit)
+    numbered_heading = re.compile(
+        r'^(\d+(?:\.\d+)*\.?)\s+([A-Za-z][A-Za-z\s&/,\-()]{2,})$'
     )
+    # All-caps title (at least 8 chars, only letters and spaces, at least 2 words)
+    allcaps_heading = re.compile(
+        r'^[A-Z]{2,}(?:\s+[A-Z]{2,})+$'
+    )
+    # Single all-caps words that are known structural headings
+    known_allcaps_headings = {
+        "PREFACE", "INTRODUCTION", "CONCURRENCE", "REFERENCES",
+        "REQUIREMENTS", "APPENDIX", "GLOSSARY", "ACRONYMS",
+        "SUMMARY", "CONTENTS", "ABSTRACT",
+    }
+    # Common TOC/table column labels that should NOT be headings
+    excluded_allcaps = {
+        "PARAGRAPH", "DESCRIPTION", "FIGURE", "TABLE", "PAGE",
+        "NUMBER", "TITLE", "SECTION", "APPENDIX",
+    }
+    # Things that should NEVER be headings
+    not_heading_patterns = [
+        re.compile(r'^[•\-\*►▪]'),          # Bullet points
+        re.compile(r'^\d+\.?\d*\s*(V|W|A|mA|MHz|GHz|Mbps|mm|cm|kg|°C|K|psi|ft-lb|N|Nm|Ω|ohm|ns|ms|µs|bytes?|BTU|dB)', re.IGNORECASE),  # Measurement values
+        re.compile(r'^\d+\s+bytes?$', re.IGNORECASE),  # "1024 bytes"
+        re.compile(r'^\d+\s*(x|×)\s*\d+'),  # Dimensions like "8 x 10"
+        re.compile(r'^(Figure|Table|Note)\s+\d', re.IGNORECASE),  # Figure/Table captions
+        re.compile(r'^\d{4}-\w{3}-\d{2}'),   # Dates like "1999-Mar-11"
+        re.compile(r'^(NUMBER|CROSS SECTIONAL|RETRO REFLECTOR|HEMISPHERICAL)', re.IGNORECASE),  # TOC figure descriptions
+    ]
 
     for page_idx in range(doc.page_count):
         page = doc[page_idx]
@@ -346,12 +392,30 @@ def _extract_sections(pdf_path: Path) -> list[dict[str, Any]]:
                 if not line_text:
                     continue
 
-                # Detect headings (larger font or numbered sections)
+                # Check exclusion patterns first
+                is_excluded = any(p.match(line_text) for p in not_heading_patterns)
+                if is_excluded:
+                    current_text_parts.append(line_text)
+                    continue
+
+                # Detect headings
                 is_heading = False
-                if max_size > 12 and len(line_text) < 100:
+
+                # Rule 1: Numbered section heading
+                if numbered_heading.match(line_text) and len(line_text) < 80:
                     is_heading = True
-                elif heading_pattern.match(line_text) and len(line_text) < 80:
+                # Rule 2: All-caps title
+                elif allcaps_heading.match(line_text) and len(line_text) < 60:
+                    # Must not be a TOC column label
+                    if line_text.strip() not in excluded_allcaps:
+                        is_heading = True
+                elif line_text.strip() in known_allcaps_headings:
                     is_heading = True
+                # Rule 3: Large font title (>14pt, has letters, short)
+                elif max_size > 14 and len(line_text) < 80 and re.search(r'[A-Za-z]{3,}', line_text):
+                    # Extra check: not a TOC entry or figure description
+                    if not any(line_text.startswith(x) for x in ("NUMBER", "CROSS", "RETRO", "HEMI")):
+                        is_heading = True
 
                 if is_heading:
                     # Flush previous section
@@ -455,46 +519,52 @@ def _diff_sections(sections_a: list[dict], sections_b: list[dict]) -> list[Secti
 # -----------------------------------------------------------------
 
 def _classify_change(old_text: str, new_text: str) -> str:
-    """Classify a change as editorial, technical, or structural."""
-    # Check for numerical value changes
-    old_numbers = set(re.findall(r'[\d.]+', old_text))
-    new_numbers = set(re.findall(r'[\d.]+', new_text))
-    if old_numbers != new_numbers:
-        return "technical"
+    """Classify a change as editorial, technical, or structural.
 
-    # Check for requirement language changes
+    - technical: specification values changed, requirements modified
+    - structural: significant reorganization (>20% word difference)
+    - editorial: document references, formatting, minor wording
+    """
+    # Check for requirement language changes (shall/must/will added or removed)
     if _has_requirement_change(old_text, new_text):
         return "technical"
 
-    # Check for significant word changes (>20% different)
+    # Check for specification value changes (numbers with engineering units)
+    # Require: standalone number not glued to letters, followed by unit with boundary
+    spec_pattern = re.compile(
+        r'(?<!\w)(\d+\.?\d*)\s*'
+        r'(V|kV|mV|W|kW|mW|mA|µA|MHz|GHz|kHz|Mbps|kbps|'
+        r'mm|cm|µm|kg|mg|°C|°F|psi|kPa|MPa|atm|'
+        r'ft-lb|Nm|kN|ohm|Ω|ns|ms|µs|sec|msec|dB|dBm|Hz)\b',
+    )
+    old_specs = set(spec_pattern.findall(old_text))
+    new_specs = set(spec_pattern.findall(new_text))
+    if old_specs != new_specs and (old_specs or new_specs):
+        return "technical"
+
+    # Check for significant word changes (>30% different = structural)
     old_words = set(old_text.lower().split())
     new_words = set(new_text.lower().split())
     if old_words and new_words:
         similarity = len(old_words & new_words) / max(len(old_words | new_words), 1)
-        if similarity < 0.8:
-            return "technical"
+        if similarity < 0.7:
+            return "structural"
 
     return "editorial"
 
 
 def _has_requirement_change(old_text: str, new_text: str) -> bool:
-    """Check if shall/will/must statements changed."""
-    req_pattern = re.compile(r'\b(shall|must|will)\b', re.IGNORECASE)
-    old_reqs = set(m.group().lower() for m in req_pattern.finditer(old_text))
-    new_reqs = set(m.group().lower() for m in req_pattern.finditer(new_text))
+    """Check if shall/will/must statements were added or removed.
 
-    if old_reqs != new_reqs:
-        return True
+    Only flags when the number of requirement statements changes,
+    not when existing statements move to different positions.
+    """
+    req_pattern = re.compile(r'\b(shall|must)\b', re.IGNORECASE)
+    old_count = len(req_pattern.findall(old_text))
+    new_count = len(req_pattern.findall(new_text))
 
-    # Also check if text around shall/must changed
-    for match in req_pattern.finditer(old_text):
-        start = max(0, match.start() - 20)
-        end = min(len(old_text), match.end() + 50)
-        old_context = old_text[start:end].lower()
-        if old_context not in new_text.lower():
-            return True
-
-    return False
+    # Only flag if the count of requirement keywords changed
+    return old_count != new_count
 
 
 def _has_tbd_change(old_text: str, new_text: str) -> bool:
@@ -520,6 +590,25 @@ def _extract_revision(text: str) -> str:
         match = re.search(pattern, text)
         if match:
             return match.group(1)
+    return ""
+
+
+def _extract_revision_from_filename(filename: str) -> str:
+    """Extract revision from filename patterns.
+
+    Handles:
+    - IDSS_IDD_RevF.pdf → F
+    - HSI_SYS_001H.pdf → H (trailing letter after digits)
+    """
+    stem = Path(filename).stem
+    # Pattern 1: _RevX suffix
+    m = re.search(r'_[Rr]ev([A-Z])', stem)
+    if m:
+        return m.group(1)
+    # Pattern 2: trailing single letter after digits (ICD convention)
+    m = re.search(r'\d([A-Z])$', stem)
+    if m:
+        return m.group(1)
     return ""
 
 

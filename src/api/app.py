@@ -3628,6 +3628,235 @@ def create_app() -> FastAPI:
                 "cost_usd": 0,
             }
 
+    # ─── Briefing Consolidation (Revision Compare) ─────────────────
+
+    @app.get("/briefing/families")
+    def get_briefing_families():
+        """Get document families available for revision comparison.
+
+        Returns families with their ordered revisions for the From/To dropdowns.
+        """
+        from src.version_diff import detect_families
+
+        families = detect_families()
+        result = []
+        for family in families:
+            # Sort versions by revision letter/number
+            versions_sorted = sorted(
+                family.versions,
+                key=lambda v: (v.revision or "Z", v.date or ""),
+            )
+            result.append({
+                "family_name": family.base_name,
+                "status": family.status,
+                "versions": [
+                    {
+                        "stem": v.stem,
+                        "filename": v.filename,
+                        "path": v.path,
+                        "revision": v.revision,
+                        "date": v.date,
+                        "page_count": v.page_count,
+                        "doc_type": v.doc_type,
+                    }
+                    for v in versions_sorted
+                ],
+            })
+        return {"families": result}
+
+    @app.post("/briefing/compare")
+    def briefing_compare(version_a: str, version_b: str):
+        """Run a full revision comparison between two documents.
+
+        Returns section-by-section analysis with value changes, TBD deltas,
+        cross-references, and maturity scores. All local — zero AWS cost.
+
+        Args:
+            version_a: Path to the older revision PDF.
+            version_b: Path to the newer revision PDF.
+        """
+        from pathlib import Path as P
+
+        from src.briefing.consolidator import (
+            build_document_summary,
+            load_document_ir,
+        )
+        from src.briefing.cross_reference import detect_cross_refs
+        from src.briefing.maturity import score_document
+        from src.briefing.section_diff import compare_revisions
+        from src.briefing.value_extraction import (
+            detect_value_conflicts,
+            extract_specifications,
+        )
+        from src.tbd_tracker import scan_document
+
+        path_a = P(version_a)
+        path_b = P(version_b)
+
+        if not path_a.exists():
+            raise HTTPException(404, f"File not found: {version_a}")
+        if not path_b.exists():
+            raise HTTPException(404, f"File not found: {version_b}")
+
+        # Load Document IRs for cross-reference and maturity analysis
+        output_dir = P("output")
+        ir_a = load_document_ir(path_a.stem, output_dir)
+        ir_b = load_document_ir(path_b.stem, output_dir)
+
+        # Build document summaries
+        summary_a = None
+        summary_b = None
+        maturity_a = []
+        maturity_b = []
+        cross_refs = []
+        value_conflicts = []
+
+        if ir_a:
+            tbds_a = scan_document(ir_a)
+            summary_a = build_document_summary(path_a.stem, ir_a, tbds_a, str(path_a))
+            maturity_a = score_document(ir_a, tbds_a)
+
+        if ir_b:
+            tbds_b = scan_document(ir_b)
+            summary_b = build_document_summary(path_b.stem, ir_b, tbds_b, str(path_b))
+            maturity_b = score_document(ir_b, tbds_b)
+
+        # Cross-references
+        if ir_a and ir_b:
+            cross_refs = detect_cross_refs(ir_a, ir_b, path_a.stem, path_b.stem)
+
+            # Value conflicts (cross-doc)
+            specs_a = extract_specifications(ir_a)
+            specs_b = extract_specifications(ir_b)
+            value_conflicts = detect_value_conflicts(
+                specs_a, specs_b, path_a.stem, path_b.stem
+            )
+
+        # Section-by-section comparison
+        comparison = compare_revisions(path_a, path_b, summary_a, summary_b)
+
+        # Attach cross-refs, maturity, and conflicts to comparison
+        comparison.cross_references = cross_refs
+        comparison.value_conflicts = value_conflicts
+        comparison.maturity_a = maturity_a
+        comparison.maturity_b = maturity_b
+
+        # Serialize for JSON response
+        return {
+            "document_a": _serialize_doc_summary(comparison.document_a),
+            "document_b": _serialize_doc_summary(comparison.document_b),
+            "stats": {
+                "total_value_changes": comparison.total_value_changes,
+                "total_tbds_resolved": comparison.total_tbds_resolved,
+                "total_tbds_introduced": comparison.total_tbds_introduced,
+                "total_sections_changed": comparison.total_sections_changed,
+                "total_sections_unchanged": comparison.total_sections_unchanged,
+            },
+            "sections": [
+                _serialize_section(s) for s in comparison.sections
+            ],
+            "cross_references": [
+                {
+                    "source_document": cr.source_document,
+                    "target_document": cr.target_document,
+                    "reference_text": cr.reference_text,
+                    "section": cr.section,
+                    "page": cr.page,
+                    "ref_type": cr.ref_type,
+                }
+                for cr in cross_refs
+            ],
+            "value_conflicts": [
+                {
+                    "parameter": vc.parameter,
+                    "value_a": vc.value_a,
+                    "value_b": vc.value_b,
+                    "unit": vc.unit,
+                    "context_a": vc.context_a[:100],
+                    "context_b": vc.context_b[:100],
+                    "document_a": vc.document_a,
+                    "document_b": vc.document_b,
+                }
+                for vc in value_conflicts
+            ],
+            "maturity_a": [
+                {"section": m.section, "score": m.score, "rating": m.rating,
+                 "tbd_count": m.tbd_count, "total_blocks": m.total_blocks}
+                for m in maturity_a
+            ],
+            "maturity_b": [
+                {"section": m.section, "score": m.score, "rating": m.rating,
+                 "tbd_count": m.tbd_count, "total_blocks": m.total_blocks}
+                for m in maturity_b
+            ],
+            "generated_at": comparison.generated_at,
+            "global_changes": comparison.global_changes,
+        }
+
+    def _serialize_doc_summary(doc):
+        """Serialize a DocumentSummary to dict."""
+        return {
+            "stem": doc.stem,
+            "filename": doc.filename,
+            "path": doc.path,
+            "revision": doc.revision,
+            "date": doc.date,
+            "page_count": doc.page_count,
+            "tbd_count": doc.tbd_count,
+            "tbr_count": doc.tbr_count,
+            "doc_type": doc.doc_type,
+        }
+
+    def _serialize_section(section):
+        """Serialize a SectionComparison to dict."""
+        result = {
+            "section_heading": section.section_heading,
+            "change_type": section.change_type,
+            "summary_line": section.summary_line,
+            "classification": section.classification,
+            "has_requirement_change": section.has_requirement_change,
+            "page_old": section.page_old,
+            "page_new": section.page_new,
+            "paragraphs_modified": section.paragraphs_modified,
+            "paragraphs_added": section.paragraphs_added,
+            "paragraphs_removed": section.paragraphs_removed,
+            "text_snippets": section.text_snippets[:5] if section.text_snippets else [],
+        }
+
+        # Value changes
+        if section.value_changes:
+            result["value_changes"] = [
+                {
+                    "parameter": vc.parameter,
+                    "old_value": vc.old_value,
+                    "new_value": vc.new_value,
+                    "unit": vc.unit,
+                    "old_context": vc.old_context[:80],
+                    "new_context": vc.new_context[:80],
+                }
+                for vc in section.value_changes
+            ]
+        else:
+            result["value_changes"] = []
+
+        # TBD delta
+        if section.tbd_delta:
+            result["tbd_delta"] = {
+                "resolved": [
+                    {"id": t.id, "item_type": t.item_type, "context": t.context[:60]}
+                    for t in section.tbd_delta.resolved
+                ],
+                "introduced": [
+                    {"id": t.id, "item_type": t.item_type, "context": t.context[:60]}
+                    for t in section.tbd_delta.introduced
+                ],
+                "net_change": section.tbd_delta.net_change,
+            }
+        else:
+            result["tbd_delta"] = {"resolved": [], "introduced": [], "net_change": 0}
+
+        return result
+
     return app
 
 

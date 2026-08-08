@@ -3,7 +3,7 @@ import { DocumentView } from "./components/DocumentView";
 import { UnifiedEditor } from "./components/UnifiedEditor";
 import { SearchPanel } from "./components/SearchPanel";
 import { TBDDashboard } from "./components/TBDDashboardPanel";
-import { VersionDiffPanel } from "./components/VersionDiffPanel";
+import { RevisionComparePanel } from "./components/RevisionComparePanel";
 import { SessionPanel } from "./components/SessionPanel";
 import { StatusBar } from "./components/StatusBar";
 import { UploadProgressPanel } from "./components/UploadProgressPanel";
@@ -12,7 +12,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useEditorStore } from "./store/editorStore";
 import type { IngestStatus } from "./api/client";
 
-type RightPanel = "editor" | "search" | "tbd" | "diff" | "session";
+type RightPanel = "editor" | "search" | "tbd" | "compare" | "session";
 
 function App() {
   const [panelWidth, setPanelWidth] = useState(420);
@@ -60,7 +60,7 @@ function App() {
 
     const handleRelatedVersions = () => {
       if (suppressPanelSwitchRef.current) return;
-      setActivePanel("diff");
+      setActivePanel("compare");
     };
 
     window.addEventListener("navigate-to-tbd", handleTbdNavigate);
@@ -156,9 +156,9 @@ function App() {
               onClick={() => setActivePanel("tbd")}
             />
             <PanelTab
-              label="🔀 Diff"
-              active={activePanel === "diff"}
-              onClick={() => setActivePanel("diff")}
+              label="📊 Compare"
+              active={activePanel === "compare"}
+              onClick={() => setActivePanel("compare")}
             />
             <PanelTab
               label="📜 Session"
@@ -171,7 +171,7 @@ function App() {
             {activePanel === "editor" && <UnifiedEditor width={panelWidth} />}
             {activePanel === "search" && <SearchPanel />}
             {activePanel === "tbd" && <TBDDashboard />}
-            {activePanel === "diff" && <VersionDiffPanel />}
+            {activePanel === "compare" && <RevisionComparePanel />}
             {activePanel === "session" && <SessionPanel />}
           </div>
         </div>

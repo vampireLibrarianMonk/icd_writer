@@ -227,4 +227,129 @@ export const api = {
     });
     return res.json();
   },
+
+  // ─── Briefing Consolidation (Revision Compare) ─────────────
+
+  async getBriefingFamilies(): Promise<BriefingFamiliesResponse> {
+    const res = await fetch(`${API_BASE}/briefing/families`);
+    return res.json();
+  },
+
+  async runBriefingCompare(versionA: string, versionB: string): Promise<BriefingCompareResponse> {
+    const params = new URLSearchParams({ version_a: versionA, version_b: versionB });
+    const res = await fetch(`${API_BASE}/briefing/compare?${params}`, { method: "POST" });
+    return res.json();
+  },
 };
+
+// ─── Briefing Types ───────────────────────────────────────────
+
+export interface BriefingFamilyVersion {
+  stem: string;
+  filename: string;
+  path: string;
+  revision: string;
+  date: string;
+  page_count: number;
+  doc_type: string;
+}
+
+export interface BriefingFamily {
+  family_name: string;
+  status: string;
+  versions: BriefingFamilyVersion[];
+}
+
+export interface BriefingFamiliesResponse {
+  families: BriefingFamily[];
+}
+
+export interface BriefingDocSummary {
+  stem: string;
+  filename: string;
+  path: string;
+  revision: string;
+  date: string;
+  page_count: number;
+  tbd_count: number;
+  tbr_count: number;
+  doc_type: string;
+}
+
+export interface BriefingValueChange {
+  parameter: string;
+  old_value: number;
+  new_value: number;
+  unit: string;
+  old_context: string;
+  new_context: string;
+}
+
+export interface BriefingTbdDelta {
+  resolved: { id: string; item_type: string; context: string }[];
+  introduced: { id: string; item_type: string; context: string }[];
+  net_change: number;
+}
+
+export interface BriefingSectionResult {
+  section_heading: string;
+  change_type: "modified" | "added" | "removed" | "unchanged";
+  summary_line: string;
+  classification: string;
+  has_requirement_change: boolean;
+  page_old: number | null;
+  page_new: number | null;
+  paragraphs_modified: number;
+  paragraphs_added: number;
+  paragraphs_removed: number;
+  text_snippets: string[];
+  value_changes: BriefingValueChange[];
+  tbd_delta: BriefingTbdDelta;
+}
+
+export interface BriefingCrossRef {
+  source_document: string;
+  target_document: string;
+  reference_text: string;
+  section: string;
+  page: number;
+  ref_type: string;
+}
+
+export interface BriefingValueConflict {
+  parameter: string;
+  value_a: number;
+  value_b: number;
+  unit: string;
+  context_a: string;
+  context_b: string;
+  document_a: string;
+  document_b: string;
+}
+
+export interface BriefingMaturityScore {
+  section: string;
+  score: number;
+  rating: string;
+  tbd_count: number;
+  total_blocks: number;
+}
+
+export interface BriefingCompareResponse {
+  document_a: BriefingDocSummary;
+  document_b: BriefingDocSummary;
+  stats: {
+    total_value_changes: number;
+    total_tbds_resolved: number;
+    total_tbds_introduced: number;
+    total_sections_changed: number;
+    total_sections_unchanged: number;
+  };
+  sections: BriefingSectionResult[];
+  global_changes: string[];
+  cross_references: BriefingCrossRef[];
+  value_conflicts: BriefingValueConflict[];
+  maturity_a: BriefingMaturityScore[];
+  maturity_b: BriefingMaturityScore[];
+  generated_at: string;
+}

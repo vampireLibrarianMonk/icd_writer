@@ -1,7 +1,9 @@
-1.1.0
+1.5.0
 
 # Version History (semantic versioning: major.minor.patch)
 #
+# 1.5.0  2026-08-07  acd805b  Phase 1 briefing consolidation: Revision Compare panel, section diff,
+#                              value extraction, boilerplate filtering, document highlight overlay
 # 1.1.0  2026-07-29  e19b50d  Add document delete, page extension (tables/lists), per-chunk progress
 # 1.0.0  2026-07-28  17b9763  Containerize app, upload pipeline, full test suite — production-ready
 # 0.9.0  2026-07-27  7d722e0  Phase 3-6 complete: search, RAG, TBD tracker, version diff, reflow

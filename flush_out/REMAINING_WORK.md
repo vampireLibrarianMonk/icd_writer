@@ -1,6 +1,6 @@
 # Remaining Work — ICD Writer
 
-Last updated: 2026-08-05
+Last updated: 2026-08-07
 
 ---
 
@@ -164,32 +164,50 @@ Currently only one document can be open at a time. Opening a new document clears
 
 ## 9. ICD Briefing Consolidation
 
-**Status:** Design complete, implementation not started  
+**Status:** Phase 1 complete (v1.5.0)  
 **Priority:** High — core value proposition of the tool  
 **Design doc:** `flush_out/ICD_BRIEFING_CONSOLIDATION.md`
 
-### Summary
+### What Works (Phase 1)
 
-Take N ICD documents and produce a single consolidated briefing:
-document summaries, TBD aggregation, cross-references, conflict detection,
-maturity scoring. Four phases from two-doc MVP to N-doc scaling with
-interface graph visualization.
+- **Revision Compare panel** replaces old Diff tab
+  - Scoped to currently opened document's family
+  - From/To dropdowns with forward-only ordering enforcement
+  - Standard mode: free structural analysis (value changes, TBD deltas, text diffs)
+  - Advanced mode: per-section AI summarize with cost display
+- **Section-by-section comparison** with collapsed accordion view
+  - Specific text diff snippets (word-level changes, not just counts)
+  - Value extraction: detects spec changes (voltages, power, dimensions)
+  - TBD delta tracking: resolved vs introduced per section
+  - Classification: editorial / technical / structural (with AI override)
+- **Boilerplate filtering**: header/footer stamps extracted as "Global Changes",
+  sections with only boilerplate reclassified as unchanged
+- **Cross-reference detection** between documents
+- **Maturity scoring** per section and overall
+- **Document highlight**: clicking page link opens doc, navigates, highlights
+  the section with orange overlay (store-driven, page-gated, no race conditions)
+- **OCR handling**: flattened PDFs prompt for OCR before comparison
+- **Family detection**: groups docs by normalized stem, handles ICD naming
+  conventions (HSI_SYS_001H + 001I grouped correctly)
 
-### Test Corpus (downloaded)
+### Test Coverage
 
-See `flush_out/TEST_DOCUMENT_CORPUS.md` for the 5-tier test plan.
-All documents are downloaded to `icds/digital/`:
+- 75 tests pass (24 unit + 32 version_diff + 19 integration)
+- Integration tests hit real API + AI summarize endpoint
+- Highlight accuracy verified: 99% (112/113 sections match overlays)
+- Alpha-tuned against HSI_SYS_001 H→I and IDSS_IDD RevE→F
 
-- **Tier 1 (ready):** IDSS IDD Rev E + Rev F
-- **Tier 2 (ready):** IDSS IDD Rev D + Rev E + Rev F (consecutive, no gaps)
-- **Tier 3 (ready):** IDSS IDD Rev A + D + E + F (with acknowledged B/C gap)
-- **Tier 4 (ready):** IDSS IDD Rev A + D + E + F + G (full public chain)
-- **Tier 5 (ready):** HSI_SYS_015G + HSI_SYS_001H + HSI_SYS_001I (cross-document)
+### Remaining (Phase 2-4)
+
+- Phase 2: Multi-revision walkthrough (D→E→F sequential)
+- Phase 3: Semantic conflict detection (Bedrock embeddings + Claude)
+- Phase 4: N-document scaling + interface topology graph
+- PDF briefing export (Jinja2 + WeasyPrint)
 
 ### Next Step
 
-Build Phase 1: two-document briefing against Tier 1 (Rev E + Rev F).
-Zero AWS cost — all local processing on Document IR + TBD extraction.
+Phase 2: extend to 3+ document chains (Tier 2 corpus). Add net-change
+view across full revision span. Consider PDF export of briefing output.
 
 
 ---

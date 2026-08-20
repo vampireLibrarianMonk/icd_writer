@@ -1379,20 +1379,36 @@ def create_app() -> FastAPI:
         # Insert each line's spans sorted by X position
         for line_key in sorted(line_groups.keys()):
             line_spans = sorted(line_groups[line_key], key=lambda s: s["x0"])
-            for span in line_spans:
+
+            # Concatenate all spans on this line into one text with original bounds
+            if len(line_spans) == 1:
+                span = line_spans[0]
                 font_size = span["size"]
-                # Use original y0 + shift, place at baseline (y0 + ascent)
                 new_y0 = span["y0"] + shift_amount
                 baseline_y = new_y0 + font_size * 0.78
-                # Don't shift past page bottom
                 if baseline_y > page_height - 50:
                     continue
                 bold = bool(span["flags"] & 2**4)
                 italic = bool(span["flags"] & 2**1)
-
                 _insert_text_with_font(
                     page, fitz.Point(span["x0"], baseline_y),
                     span["text"], span["font"], font_size, bold, italic,
+                )
+            else:
+                # Multiple spans on same line — join them and insert as one
+                # This prevents font metric differences from causing overlaps
+                full_text = "".join(s["text"] for s in line_spans)
+                first_span = line_spans[0]
+                font_size = first_span["size"]
+                new_y0 = first_span["y0"] + shift_amount
+                baseline_y = new_y0 + font_size * 0.78
+                if baseline_y > page_height - 50:
+                    continue
+                bold = bool(first_span["flags"] & 2**4)
+                italic = bool(first_span["flags"] & 2**1)
+                _insert_text_with_font(
+                    page, fitz.Point(first_span["x0"], baseline_y),
+                    full_text, first_span["font"], font_size, bold, italic,
                 )
 
         # ─── Re-draw vector drawings at shifted positions ──────────

@@ -304,6 +304,8 @@ function PageElementSelector({ currentPage, defaultSection }: { currentPage: num
   const [hasToc, setHasToc] = useState(false);
 
   // Detect what's on this page
+  const [bodyElements, setBodyElements] = useState<{id: string; text: string; type: string}[]>([]);
+
   useEffect(() => {
     if (!totalPages || !currentPage) return;
     // Check header/footer
@@ -324,6 +326,20 @@ function PageElementSelector({ currentPage, defaultSection }: { currentPage: num
       .then((r) => r.json())
       .then((data) => setHasToc(data.is_toc || false))
       .catch(() => setHasToc(false));
+    // Get body elements for the content list
+    fetch(`${API_BASE}/document/page/${currentPage}/elements`)
+      .then((r) => r.json())
+      .then((data) => {
+        const elems = (data.elements || []).filter(
+          (e: any) => e.type !== "header" && e.type !== "footer"
+        );
+        setBodyElements(elems.map((e: any) => ({
+          id: e.id,
+          text: e.text,
+          type: e.type,
+        })));
+      })
+      .catch(() => setBodyElements([]));
   }, [currentPage, totalPages, refreshTrigger]);
 
   // Auto-select based on defaultSection prop
@@ -339,6 +355,12 @@ function PageElementSelector({ currentPage, defaultSection }: { currentPage: num
   for (let i = 0; i < tableZoneCount; i++) {
     options.push({ value: `table-${i}`, label: tableZoneCount > 1 ? `Table ${i + 1}` : "Table" });
   }
+  // Add body content elements (headings and paragraphs)
+  for (const elem of bodyElements) {
+    const preview = elem.text.slice(0, 50).replace(/\n/g, " ");
+    const icon = elem.type === "heading" ? "§" : "¶";
+    options.push({ value: `block-${elem.id}`, label: `${icon} ${preview}` });
+  }
 
   if (options.length === 0) return null;
 
@@ -346,7 +368,26 @@ function PageElementSelector({ currentPage, defaultSection }: { currentPage: num
     <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
       <select
         value={activeSection}
-        onChange={(e) => setActiveSection(e.target.value)}
+        onChange={(e) => {
+          const val = e.target.value;
+          setActiveSection(val);
+          // If a body block is selected, dispatch element-selected to show it in the editor
+          if (val.startsWith("block-")) {
+            const blockId = val.replace("block-", "");
+            const elem = bodyElements.find((el) => el.id === blockId);
+            if (elem) {
+              // Fetch full element data to get bbox
+              fetch(`${API_BASE}/document/page/${currentPage}/elements`)
+                .then((r) => r.json())
+                .then((data) => {
+                  const fullElem = (data.elements || []).find((el: any) => el.id === blockId);
+                  if (fullElem) {
+                    window.dispatchEvent(new CustomEvent("element-selected", { detail: fullElem }));
+                  }
+                });
+            }
+          }
+        }}
         style={{
           width: "100%",
           fontSize: "12px",

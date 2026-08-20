@@ -4,6 +4,7 @@ import { UnifiedEditor } from "./components/UnifiedEditor";
 import { SearchPanel } from "./components/SearchPanel";
 import { TBDDashboard } from "./components/TBDDashboardPanel";
 import { RevisionComparePanel } from "./components/RevisionComparePanel";
+import { DocumentManagerPanel } from "./components/DocumentManagerPanel";
 import { SessionPanel } from "./components/SessionPanel";
 import { StatusBar } from "./components/StatusBar";
 import { UploadProgressPanel } from "./components/UploadProgressPanel";
@@ -12,7 +13,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useEditorStore } from "./store/editorStore";
 import type { IngestStatus } from "./api/client";
 
-type RightPanel = "editor" | "search" | "tbd" | "compare" | "session";
+type RightPanel = "editor" | "search" | "tbd" | "compare" | "docs" | "session";
 
 function App() {
   const [panelWidth, setPanelWidth] = useState(420);
@@ -161,6 +162,11 @@ function App() {
               onClick={() => setActivePanel("compare")}
             />
             <PanelTab
+              label="📁 Docs"
+              active={activePanel === "docs"}
+              onClick={() => setActivePanel("docs")}
+            />
+            <PanelTab
               label="📜 Session"
               active={activePanel === "session"}
               onClick={() => setActivePanel("session")}
@@ -172,6 +178,7 @@ function App() {
             {activePanel === "search" && <SearchPanel />}
             {activePanel === "tbd" && <TBDDashboard />}
             {activePanel === "compare" && <RevisionComparePanel />}
+            {activePanel === "docs" && <DocumentManagerPanel />}
             {activePanel === "session" && <SessionPanel />}
           </div>
         </div>

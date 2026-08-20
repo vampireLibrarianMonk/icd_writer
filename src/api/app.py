@@ -2173,7 +2173,12 @@ def create_app() -> FastAPI:
                     del entry["is_number_prefix"]
                 merged.append(entry)
 
-        return {"is_toc": len(merged) >= 3, "entries": merged}
+        # A page is TOC only if it has entries with leader dots AND page references.
+        # Just having section numbers or body text doesn't make it a TOC page.
+        entries_with_page_refs = sum(1 for e in merged if e.get("page_ref"))
+        is_toc = entries_with_page_refs >= 3
+
+        return {"is_toc": is_toc, "entries": merged if is_toc else []}
 
     @app.put("/document/page/{page_number}/toc")
     def edit_toc_entry(page_number: int, index: int, title: str = "", page_ref: str = ""):

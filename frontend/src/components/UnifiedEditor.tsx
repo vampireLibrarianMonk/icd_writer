@@ -140,9 +140,9 @@ export function UnifiedEditor({ width }: { width: number }) {
         <PageElementSelector currentPage={currentPage} />
         <div style={{ padding: "16px", color: "var(--text-muted)" }}>
           <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-            Edit page content by clicking elements on the document. Use the dropdown above to edit headers, footers, tables, or table of contents entries. Changes are saved to a working copy until you use File &gt; Save Document.
+            Select an element from the dropdown above or click directly on the document to edit. Changes are saved to a working copy until you use File &gt; Save Document.
           </p>
-          Click any element on the page to edit it.
+          Select an element to begin editing.
         </div>
       </div>
     );
@@ -355,11 +355,13 @@ function PageElementSelector({ currentPage, defaultSection }: { currentPage: num
   for (let i = 0; i < tableZoneCount; i++) {
     options.push({ value: `table-${i}`, label: tableZoneCount > 1 ? `Table ${i + 1}` : "Table" });
   }
-  // Add body content elements (headings and paragraphs)
+  // Add body content elements labeled by type and count
+  const typeCounts: Record<string, number> = {};
   for (const elem of bodyElements) {
-    const preview = elem.text.slice(0, 50).replace(/\n/g, " ");
-    const icon = elem.type === "heading" ? "§" : "¶";
-    options.push({ value: `block-${elem.id}`, label: `${icon} ${preview}` });
+    typeCounts[elem.type] = (typeCounts[elem.type] || 0) + 1;
+    const count = typeCounts[elem.type];
+    const typeLabel = elem.type.charAt(0).toUpperCase() + elem.type.slice(1);
+    options.push({ value: `block-${elem.id}`, label: `${typeLabel} ${count}` });
   }
 
   if (options.length === 0) return null;

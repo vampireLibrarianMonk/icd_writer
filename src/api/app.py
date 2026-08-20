@@ -1380,34 +1380,60 @@ def create_app() -> FastAPI:
         for line_key in sorted(line_groups.keys()):
             line_spans = sorted(line_groups[line_key], key=lambda s: s["x0"])
 
-            # Concatenate all spans on this line into one text with original bounds
-            if len(line_spans) == 1:
-                span = line_spans[0]
-                font_size = span["size"]
-                new_y0 = span["y0"] + shift_amount
+            # Compute line bounds from all spans
+            line_x0 = line_spans[0]["x0"]
+            line_x1 = max(s["x1"] for s in line_spans)
+            first_span = line_spans[0]
+            font_size = first_span["size"]
+            new_y0 = first_span["y0"] + shift_amount
+            span_height = first_span["y1"] - first_span["y0"]
+
+            if new_y0 + span_height > page_height - 50:
+                continue
+
+            bold = bool(first_span["flags"] & 2**4)
+            italic = bool(first_span["flags"] & 2**1)
+
+            # Join all spans on this line
+            full_text = "".join(s["text"] for s in line_spans)
+
+            # Use textbox to constrain text within original left-right bounds
+            # The rect height allows one line of text (span height + small padding)
+            text_rect = fitz.Rect(line_x0, new_y0, line_x1, new_y0 + span_height + 2)
+
+            # Get font
+            from src.rendering.font_cache import FontCache
+            cache: FontCache | None = state.get("font_cache")
+            fontname_use = "tiro"
+            fontfile_use = None
+
+            if cache:
+                _, fn, fb = cache.get_font(first_span["font"], bold, italic)
+                if fb:
+                    tmp_font = Path("output") / ".tmp_font_shift.ttf"
+                    tmp_font.write_bytes(fb)
+                    fontfile_use = str(tmp_font)
+                elif fn:
+                    fontname_use = fn
+
+            try:
+                if fontfile_use:
+                    page.insert_textbox(
+                        text_rect, full_text,
+                        fontfile=fontfile_use, fontsize=font_size,
+                        color=(0, 0, 0), align=0,
+                    )
+                else:
+                    page.insert_textbox(
+                        text_rect, full_text,
+                        fontname=fontname_use, fontsize=font_size,
+                        color=(0, 0, 0), align=0,
+                    )
+            except Exception:
+                # Fallback: plain insert_text
                 baseline_y = new_y0 + font_size * 0.78
-                if baseline_y > page_height - 50:
-                    continue
-                bold = bool(span["flags"] & 2**4)
-                italic = bool(span["flags"] & 2**1)
                 _insert_text_with_font(
-                    page, fitz.Point(span["x0"], baseline_y),
-                    span["text"], span["font"], font_size, bold, italic,
-                )
-            else:
-                # Multiple spans on same line — join them and insert as one
-                # This prevents font metric differences from causing overlaps
-                full_text = "".join(s["text"] for s in line_spans)
-                first_span = line_spans[0]
-                font_size = first_span["size"]
-                new_y0 = first_span["y0"] + shift_amount
-                baseline_y = new_y0 + font_size * 0.78
-                if baseline_y > page_height - 50:
-                    continue
-                bold = bool(first_span["flags"] & 2**4)
-                italic = bool(first_span["flags"] & 2**1)
-                _insert_text_with_font(
-                    page, fitz.Point(first_span["x0"], baseline_y),
+                    page, fitz.Point(line_x0, baseline_y),
                     full_text, first_span["font"], font_size, bold, italic,
                 )
 

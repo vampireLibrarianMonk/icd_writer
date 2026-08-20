@@ -18,6 +18,9 @@ interface EditorState {
   compareHighlight: string | null;
   compareHighlightPage: number | null;
 
+  // Loading indicator
+  loadingMessage: string | null;
+
   // Session
   sessionId: string | null;
   editCount: number;
@@ -47,6 +50,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   editText: "",
   compareHighlight: null,
   compareHighlightPage: null,
+  loadingMessage: null,
   sessionId: null,
   editCount: 0,
   refreshTrigger: 0,
@@ -54,13 +58,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   canRedo: false,
 
   loadDocument: async (path: string) => {
+    const filename = path.split(/[/\\]/).pop() || path;
+    set({ loadingMessage: `Opening ${filename}...` });
+
     // Start session
     const session = await api.startSession();
+    set({ loadingMessage: `Extracting text from ${filename}...` });
 
     // Open document
     const result = await api.openDocument(path);
     if (result.status === "ready") {
       set({
+        loadingMessage: `Rendering page 1 of ${result.pages}...`,
         documentLoaded: true,
         documentPath: path,
         totalPages: result.pages,
@@ -69,6 +78,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       });
       // Load first page
       await get().goToPage(1);
+      set({ loadingMessage: null });
 
       // Notify if related versions exist
       if (result.related_versions && result.related_versions.length > 0) {
@@ -76,6 +86,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           detail: { currentPath: path, relatedVersions: result.related_versions },
         }));
       }
+    } else {
+      set({ loadingMessage: null });
     }
   },
 

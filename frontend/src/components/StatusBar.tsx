@@ -10,6 +10,7 @@ interface StatusBarProps {
 export function StatusBar({ ingestStatus }: StatusBarProps) {
   const { documentLoaded, documentPath, totalPages, currentPage, editCount, sessionId } =
     useEditorStore();
+  const loadingMessage = useEditorStore((s) => s.loadingMessage);
   const [totalCost, setTotalCost] = useState(0);
 
   // Poll costs every 5 seconds
@@ -108,7 +109,13 @@ export function StatusBar({ ingestStatus }: StatusBarProps) {
         padding: "4px 16px",
         color: "var(--text-secondary, #666)",
       }}>
-        {!documentLoaded ? (
+        {loadingMessage ? (
+          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ display: "inline-block", width: "10px", height: "10px", border: "2px solid var(--accent, #1976d2)", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+            <span style={{ color: "var(--accent, #1976d2)", fontWeight: 500 }}>{loadingMessage}</span>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </span>
+        ) : !documentLoaded ? (
           <span>Ready — Upload a PDF or open an indexed document</span>
         ) : (
           <span>

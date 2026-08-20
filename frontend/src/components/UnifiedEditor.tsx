@@ -73,22 +73,7 @@ export function UnifiedEditor({ width }: { width: number }) {
     };
   }, [allElements]);
 
-  // Navigate to prev/next element
-  const navigateElement = (direction: "prev" | "next") => {
-    if (allElements.length === 0) return;
-    let newIdx = currentElementIdx;
-    if (direction === "next") {
-      newIdx = currentElementIdx < allElements.length - 1 ? currentElementIdx + 1 : 0;
-    } else {
-      newIdx = currentElementIdx > 0 ? currentElementIdx - 1 : allElements.length - 1;
-    }
-    const elem = allElements[newIdx];
-    setSelected(elem);
-    setEditText(elem.text);
-    setCurrentElementIdx(newIdx);
-    // Also highlight it on the document view
-    window.dispatchEvent(new CustomEvent("element-selected", { detail: elem }));
-  };
+  // (Navigation is handled by the PageElementSelector dropdown)
 
   // Check page type
   useEffect(() => {
@@ -140,9 +125,9 @@ export function UnifiedEditor({ width }: { width: number }) {
         <PageElementSelector currentPage={currentPage} />
         <div style={{ padding: "16px", color: "var(--text-muted)" }}>
           <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-            Select an element from the dropdown above or click directly on the document to edit. Changes are saved to a working copy until you use File &gt; Save Document.
+            Select an element from the dropdown or click directly on the document to edit.
+            Changes are saved to a working copy until you use File &gt; Save Document.
           </p>
-          Select an element to begin editing.
         </div>
       </div>
     );
@@ -193,10 +178,10 @@ export function UnifiedEditor({ width }: { width: number }) {
 
   return (
     <div style={{ width: `${width}px`, padding: "0", background: "var(--bg-panel)", overflow: "auto" }}>
-      {/* Dropdown selector for header/footer/tables */}
+      {/* Consolidated element selector */}
       <PageElementSelector currentPage={currentPage} />
 
-      <div style={{ padding: "16px" }}>
+      <div style={{ padding: "12px 16px" }}>
       {/* Back button on special pages */}
       {isTocPage && (
         <button
@@ -206,32 +191,10 @@ export function UnifiedEditor({ width }: { width: number }) {
           ← Back to TOC
         </button>
       )}
-      {/* Element navigation bar */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "6px",
-        marginBottom: "8px",
-        padding: "4px 8px",
-        background: "var(--bg-secondary)",
-        borderRadius: "4px",
-        fontSize: "11px",
-      }}>
-        <button
-          onClick={() => navigateElement("prev")}
-          disabled={allElements.length === 0}
-          style={{ padding: "2px 6px", fontSize: "11px" }}
-          title="Previous element"
-        >◀</button>
-        <span style={{ fontWeight: 500 }}>
-          Element {currentElementIdx >= 0 ? currentElementIdx + 1 : "—"} of {allElements.length}
-        </span>
-        <button
-          onClick={() => navigateElement("next")}
-          disabled={allElements.length === 0}
-          style={{ padding: "2px 6px", fontSize: "11px" }}
-          title="Next element"
-        >▶</button>
+
+      {/* Element counter */}
+      <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginBottom: "8px" }}>
+        Element {currentElementIdx >= 0 ? currentElementIdx + 1 : "—"} of {allElements.length}
       </div>
 
       {/* Element label */}
@@ -346,6 +309,23 @@ function PageElementSelector({ currentPage, defaultSection }: { currentPage: num
   useEffect(() => {
     if (defaultSection) setActiveSection(defaultSection);
   }, [defaultSection]);
+
+  // Sync dropdown when element is selected from outside (clicking on document)
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      const elem = e.detail;
+      if (elem && elem.id) {
+        const matchValue = `block-${elem.id}`;
+        // Check if this element is in our options
+        const exists = bodyElements.some((b) => b.id === elem.id);
+        if (exists) {
+          setActiveSection(matchValue);
+        }
+      }
+    };
+    window.addEventListener("element-selected" as any, handler);
+    return () => window.removeEventListener("element-selected" as any, handler);
+  }, [bodyElements]);
 
   // Build options
   const options: { value: string; label: string }[] = [];

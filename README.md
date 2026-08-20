@@ -28,13 +28,16 @@ See [USER_GUIDE.md](USER_GUIDE.md) for a full walkthrough with examples.
 - **PDF Extraction** — Text blocks with bounding boxes, fonts, and reading order
 - **Document Editing** — Click-to-edit paragraphs, table cells (inline), and TOC entries with undo/redo
 - **Table Cell Editor** — Click directly on table cells in the viewer for instant inline editing
+- **Table Row Add/Delete** — Add or remove table rows with proper content shifting (lossless clip-and-paste)
+- **Document Manager** — File-explorer style panel: multi-select, bulk delete, upload, sort, filter
+- **Revision Compare** — Section-by-section diff with value extraction, TBD tracking, AI summaries
 - **Session Management** — Save/Load editing sessions across restarts with full action timeline
+- **Loading Indicator** — Status bar spinner with progress messages during document operations
 - **Page Extension** — Edits that overflow a page merge naturally onto the next page
 - **Heading Preservation** — Section headings stay in their original bold font when paragraphs below are edited
 - **Semantic Search** — Hybrid keyword + vector search across all indexed ICDs
 - **RAG (AI Answers)** — Natural language questions answered with inline citations
 - **TBD Dashboard** — Cross-document TBD/TBR tracking with status management and conflict detection
-- **Version Diff** — Compare document revisions, flag requirement changes, AI-summarize diffs
 - **Upload & Index** — Upload PDF → extract → embed → index with real-time progress
 - **Faithful Export** — Unedited pages are byte-identical to source; only edited text is re-rendered
 

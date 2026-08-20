@@ -1,7 +1,9 @@
-1.5.0
+1.6.0
 
 # Version History (semantic versioning: major.minor.patch)
 #
+# 1.6.0  2026-08-07  b986ed3  Document Manager panel, element type pipeline revamp, table shift fix,
+#                              loading indicator, undo/redo in session panel, TOC detection fix
 # 1.5.0  2026-08-07  acd805b  Phase 1 briefing consolidation: Revision Compare panel, section diff,
 #                              value extraction, boilerplate filtering, document highlight overlay
 # 1.1.0  2026-07-29  e19b50d  Add document delete, page extension (tables/lists), per-chunk progress

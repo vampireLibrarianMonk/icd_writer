@@ -6,6 +6,74 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.6.0] — 2026-08-07
+
+### Added
+- **Document Manager panel** (`📁 Docs` tab): file-explorer style with multi-select
+  checkboxes, bulk delete, upload (multi-file), sort by name/size, filter, status bar
+  showing selection count and total size. Double-click to open.
+- **Loading indicator**: bottom-left status bar shows spinning ring + progress messages
+  ("Opening...", "Extracting text...", "Rendering page 1 of N...") during document open.
+- **Undo/Redo buttons** in the Session panel (below session info, above timeline).
+- **Element type regression tests** (`tests/unit/test_element_classification.py`): 17 tests
+  covering TOC entries, giant blocks, merged content, captions, footers.
+- **Document audit scripts** for verifying element classification across all test corpus.
+
+### Changed
+- **Element type detection pipeline revamped** (`src/extraction/text_extractor.py`):
+  - New `_split_block_by_style()` splits blocks on font-size transitions and heading patterns
+  - TOC entries (4+ consecutive dots) classified as `list_item` not `heading`
+  - Height guard: blocks >80px classified as `paragraph` (prevents merged heading+body misclass)
+  - Audit results: 183 issues → 18 (90% reduction across 7 documents)
+- **Table row shift uses clip-and-paste** instead of lossy redact+re-insert:
+  - `show_pdf_page()` moves content below the table as an exact block
+  - Preserves fonts, drawings, images perfectly — no more overlaps or missing text
+- **TOC detection tightened**: `/document/page/{n}/toc` now requires 3+ entries with actual
+  page references (from leader dots), not just any text spans. Prevents false TOC editor
+  on normal content pages.
+- **Overlay borders removed**: element overlays use `border: none` by default (were
+  `1px solid transparent` which rendered as faint artifacts on some displays).
+
+### Fixed
+- **Table row height_delta calculation**: uses `max(original_table_y1, req.y_max)` as
+  reference instead of border-detected bottom. Caption rows no longer confuse the math.
+- **Text overlap after table shift**: same-line spans (split across PDF content streams)
+  no longer overlap when re-inserted — resolved by switching to clip-and-paste approach.
+- **TOC misclassification on content pages**: pages with numbered sections + body text
+  no longer trigger the TOC editor dropdown.
+- **Editor dropdown shows all page elements**: heading/paragraph/caption blocks listed
+  by type and count, not just special sections (header/footer/table/TOC).
+- **Header/footer zone elements excluded** from body dropdown (prevents unclickable
+  items like "Heading 1" pointing to header-zone text).
+
+---
+
+## [1.5.0] — 2026-08-07
+
+### Added
+- **Revision Compare panel** (`📊 Compare` tab): replaces old Diff tab with full
+  section-by-section analysis: value extraction, TBD deltas, text snippets, boilerplate
+  filtering, cross-references, value conflicts, maturity scoring.
+- **Standard/Advanced analysis modes**: Standard is free (structural only), Advanced
+  reveals per-section AI summarize buttons with cost display.
+- **Document highlight overlay**: clicking a page link in Compare opens the document,
+  navigates to the page, and highlights the section with an orange overlay.
+- **Boilerplate detection**: repeated header/footer stamps extracted as "Global Changes"
+  and excluded from per-section diffs.
+- **Section extraction overhaul** (`src/version_diff.py`): numbered headings require
+  alphabetic title text, bullets/measurements/dates excluded, font threshold raised.
+- **Filename revision extraction**: ICD naming conventions (HSI_SYS_001H → Rev H)
+  recognized for family grouping.
+- **75 tests** covering briefing, version diff, element classification, and integration.
+
+### Changed
+- **Old Diff tab removed** — functionality merged into the Compare panel with OCR
+  handling, AI summarize, and progressive disclosure.
+- **Classification accuracy**: spec-value pattern case-sensitive, no bare A/g/K units,
+  `_has_requirement_change` only fires on shall/must count changes.
+
+---
+
 ## [1.3.0] — 2026-08-01
 
 ### Added

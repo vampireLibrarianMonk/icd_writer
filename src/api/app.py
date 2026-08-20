@@ -1312,12 +1312,16 @@ def create_app() -> FastAPI:
         }
 
     def _shift_below(page, raw, y_threshold: float, shift_amount: float):
-        """Shift text content below y_threshold by shift_amount (positive=down, negative=up)."""
+        """Shift ALL content below y_threshold by shift_amount (positive=down, negative=up).
+
+        Handles both text spans AND vector drawings (table borders, lines, etc.)
+        """
         import fitz
 
         page_height = page.rect.height
-        spans_to_shift = []
 
+        # ─── Collect text spans below threshold ────────────────────
+        spans_to_shift = []
         for block in raw.get("blocks", []):
             if block.get("type") != 0:
                 continue
@@ -1339,20 +1343,37 @@ def create_app() -> FastAPI:
                                 "flags": span.get("flags", 0),
                             })
 
-        if not spans_to_shift:
+        # ─── Collect drawings below threshold ──────────────────────
+        drawings = page.get_drawings()
+        drawings_to_shift = []
+        for d in drawings:
+            rect = d.get("rect")
+            if not rect:
+                continue
+            r = fitz.Rect(rect)
+            # Only shift drawings whose top edge is below the threshold
+            if r.y0 > y_threshold + 2 and r.y0 < page_height - 30:
+                drawings_to_shift.append(d)
+
+        if not spans_to_shift and not drawings_to_shift:
             return
 
-        # Redact
-        for span in spans_to_shift:
-            r = fitz.Rect(span["x0"] - 1, span["y0"] - 1, span["x1"] + 1, span["y1"] + 1)
-            page.add_redact_annot(r, fill=(1, 1, 1))
-        page.apply_redactions()
+        # ─── Redact everything below threshold (text + drawings) ───
+        # Use a single large redaction to clear the area
+        redact_y_start = y_threshold + 2
+        redact_y_end = page_height - 50  # Leave footer area
+        if spans_to_shift or drawings_to_shift:
+            redact_rect = fitz.Rect(0, redact_y_start, page.rect.width, redact_y_end)
+            page.add_redact_annot(redact_rect, fill=(1, 1, 1))
+            page.apply_redactions()
 
-        # Rewrite shifted
+        # ─── Re-draw text at shifted positions ─────────────────────
         for span in spans_to_shift:
             font_size = span["size"]
             baseline_y = span["y1"] - font_size * 0.18 + shift_amount
-            bold = bool(span["flags"] & 2**4)
+            # Don't shift past page bottom
+            if baseline_y > page_height - 50:
+                continue
             bold = bool(span["flags"] & 2**4)
             italic = bool(span["flags"] & 2**1)
 
@@ -1360,6 +1381,36 @@ def create_app() -> FastAPI:
                 page, fitz.Point(span["x0"], baseline_y),
                 span["text"], span["font"], font_size, bold, italic,
             )
+
+        # ─── Re-draw vector drawings at shifted positions ──────────
+        for d in drawings_to_shift:
+            items = d.get("items", [])
+            color = d.get("color")
+            fill = d.get("fill")
+            width = d.get("width", 1.0)
+
+            if not items:
+                continue
+
+            shape = page.new_shape()
+            for item in items:
+                if item[0] == "l":  # line
+                    p1 = fitz.Point(item[1].x, item[1].y + shift_amount)
+                    p2 = fitz.Point(item[2].x, item[2].y + shift_amount)
+                    shape.draw_line(p1, p2)
+                elif item[0] == "re":  # rectangle
+                    r = item[1]
+                    shifted_rect = fitz.Rect(r.x0, r.y0 + shift_amount, r.x1, r.y1 + shift_amount)
+                    # Don't draw past page bottom
+                    if shifted_rect.y1 > page_height - 30:
+                        continue
+                    shape.draw_rect(shifted_rect)
+                elif item[0] == "c":  # curve
+                    pts = [fitz.Point(p.x, p.y + shift_amount) for p in item[1:5]]
+                    shape.draw_bezier(*pts)
+
+            shape.finish(color=color, fill=fill, width=width)
+            shape.commit()
 
 
     @app.get("/document/page/{page_number}/image")

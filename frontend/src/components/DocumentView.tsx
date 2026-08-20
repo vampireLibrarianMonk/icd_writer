@@ -301,7 +301,7 @@ export function DocumentView() {
                   ? "2px solid var(--accent)"
                   : compareHighlightIdx === idx
                   ? "2px solid #ff9800"
-                  : "1px solid transparent",
+                  : "none",
                 background: selectedIdx === idx
                   ? "var(--accent-light)"
                   : compareHighlightIdx === idx
@@ -309,16 +309,17 @@ export function DocumentView() {
                   : "transparent",
                 cursor: "pointer",
                 transition: "background 0.2s, border 0.2s",
+                boxSizing: "border-box",
               }}
               onMouseEnter={(e) => {
-                if (selectedIdx !== idx) {
+                if (selectedIdx !== idx && compareHighlightIdx !== idx) {
                   (e.currentTarget as HTMLElement).style.border = "1px solid var(--accent)";
                   (e.currentTarget as HTMLElement).style.background = "rgba(33,150,243,0.04)";
                 }
               }}
               onMouseLeave={(e) => {
-                if (selectedIdx !== idx) {
-                  (e.currentTarget as HTMLElement).style.border = "1px solid transparent";
+                if (selectedIdx !== idx && compareHighlightIdx !== idx) {
+                  (e.currentTarget as HTMLElement).style.border = "none";
                   (e.currentTarget as HTMLElement).style.background = "transparent";
                 }
               }}

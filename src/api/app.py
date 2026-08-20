@@ -1315,123 +1315,53 @@ def create_app() -> FastAPI:
         }
 
     def _shift_below(page, raw, y_threshold: float, shift_amount: float):
-        """Shift ALL content below y_threshold by shift_amount (positive=down, negative=up).
+        """Shift ALL content below y_threshold by shift_amount.
 
-        Handles both text spans AND vector drawings (table borders, lines, etc.)
+        Uses a clip-and-paste approach: captures everything below the threshold
+        as a page fragment, redacts the original, then pastes it back at the
+        shifted position. This preserves text, drawings, and images exactly
+        as they were — no font substitution, no re-drawing.
         """
         import fitz
 
+        page_width = page.rect.width
         page_height = page.rect.height
 
-        # ─── Collect text spans below threshold ────────────────────
-        spans_to_shift = []
-        for block in raw.get("blocks", []):
-            if block.get("type") != 0:
-                continue
-            for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    bbox = span["bbox"]
-                    if bbox[1] > y_threshold + 2 and bbox[1] < page_height - 55:
-                        chars = span.get("chars", [])
-                        text = "".join(c["c"] for c in chars).strip()
-                        if text:
-                            spans_to_shift.append({
-                                "text": text,
-                                "x0": bbox[0],
-                                "y0": bbox[1],
-                                "x1": bbox[2],
-                                "y1": bbox[3],
-                                "font": span.get("font", "TimesNewRoman"),
-                                "size": span.get("size", 12.0),
-                                "flags": span.get("flags", 0),
-                            })
+        # Define the source rectangle (everything below threshold to near page bottom)
+        # Leave 30pt for footer area which shouldn't shift
+        src_rect = fitz.Rect(0, y_threshold + 1, page_width, page_height - 30)
 
-        # ─── Collect drawings below threshold ──────────────────────
-        drawings = page.get_drawings()
-        drawings_to_shift = []
-        for d in drawings:
-            rect = d.get("rect")
-            if not rect:
-                continue
-            r = fitz.Rect(rect)
-            # Only shift drawings whose top edge is below the threshold
-            if r.y0 > y_threshold + 2 and r.y0 < page_height - 30:
-                drawings_to_shift.append(d)
+        # Check if there's any content in this area worth shifting
+        text_in_area = page.get_text("text", clip=src_rect).strip()
+        drawings_in_area = [d for d in page.get_drawings()
+                           if d.get("rect") and fitz.Rect(d["rect"]).y0 > y_threshold + 1
+                           and fitz.Rect(d["rect"]).y0 < page_height - 30]
 
-        if not spans_to_shift and not drawings_to_shift:
+        if not text_in_area and not drawings_in_area:
             return
 
-        # ─── Redact everything below threshold (text + drawings) ───
-        # Use a single large redaction to clear the area
-        redact_y_start = y_threshold + 2
-        redact_y_end = page_height - 50  # Leave footer area
-        if spans_to_shift or drawings_to_shift:
-            redact_rect = fitz.Rect(0, redact_y_start, page.rect.width, redact_y_end)
-            page.add_redact_annot(redact_rect, fill=(1, 1, 1))
-            page.apply_redactions()
+        # Create a temporary PDF with just this page
+        temp_doc = fitz.open()
+        temp_doc.insert_pdf(page.parent, from_page=page.number, to_page=page.number)
+        temp_page = temp_doc[0]
 
-        # ─── Re-draw text at shifted positions ─────────────────────
-        # Group spans by Y position (same-line spans must stay together)
-        from collections import defaultdict
-        line_groups = defaultdict(list)
-        for span in spans_to_shift:
-            # Round Y to group spans on the same line (within 1pt)
-            line_key = round(span["y0"] * 2) / 2  # 0.5pt precision
-            line_groups[line_key].append(span)
+        # Destination rectangle (same width, shifted vertically)
+        dst_rect = fitz.Rect(
+            src_rect.x0,
+            src_rect.y0 + shift_amount,
+            src_rect.x1,
+            src_rect.y1 + shift_amount,
+        )
 
-        # Insert each line's spans sorted by X position
-        for line_key in sorted(line_groups.keys()):
-            line_spans = sorted(line_groups[line_key], key=lambda s: s["x0"])
+        # Redact the original area (clear everything below threshold)
+        page.add_redact_annot(src_rect, fill=(1, 1, 1))
+        page.apply_redactions()
 
-            first_span = line_spans[0]
-            font_size = first_span["size"]
-            new_y0 = first_span["y0"] + shift_amount
-            baseline_y = new_y0 + font_size * 0.78
+        # Paste the captured content back at the shifted position
+        # show_pdf_page renders a clip of the source page onto the target
+        page.show_pdf_page(dst_rect, temp_doc, 0, clip=src_rect)
 
-            if baseline_y > page_height - 50:
-                continue
-
-            bold = bool(first_span["flags"] & 2**4)
-            italic = bool(first_span["flags"] & 2**1)
-
-            # Join all spans on this line into one text string
-            full_text = "".join(s["text"] for s in line_spans)
-
-            # Use insert_text at the correct baseline (always renders)
-            _insert_text_with_font(
-                page, fitz.Point(first_span["x0"], baseline_y),
-                full_text, first_span["font"], font_size, bold, italic,
-            )
-
-        # ─── Re-draw vector drawings at shifted positions ──────────
-        for d in drawings_to_shift:
-            items = d.get("items", [])
-            color = d.get("color")
-            fill = d.get("fill")
-            width = d.get("width", 1.0)
-
-            if not items:
-                continue
-
-            shape = page.new_shape()
-            for item in items:
-                if item[0] == "l":  # line
-                    p1 = fitz.Point(item[1].x, item[1].y + shift_amount)
-                    p2 = fitz.Point(item[2].x, item[2].y + shift_amount)
-                    shape.draw_line(p1, p2)
-                elif item[0] == "re":  # rectangle
-                    r = item[1]
-                    shifted_rect = fitz.Rect(r.x0, r.y0 + shift_amount, r.x1, r.y1 + shift_amount)
-                    # Don't draw past page bottom
-                    if shifted_rect.y1 > page_height - 30:
-                        continue
-                    shape.draw_rect(shifted_rect)
-                elif item[0] == "c":  # curve
-                    pts = [fitz.Point(p.x, p.y + shift_amount) for p in item[1:5]]
-                    shape.draw_bezier(*pts)
-
-            shape.finish(color=color, fill=fill, width=width)
-            shape.commit()
+        temp_doc.close()
 
 
     @app.get("/document/page/{page_number}/image")

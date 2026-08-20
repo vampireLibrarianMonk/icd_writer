@@ -69,7 +69,45 @@ export function SessionPanel() {
       <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "12px" }}>
         <strong>Session:</strong> {journal.session_id}<br />
         <strong>Document:</strong> {journal.document.split("/").pop() || "none"}<br />
-        <strong>Edits:</strong> {journal.edit_count} | <strong>Undo:</strong> {journal.undo_available ? "yes" : "no"} | <strong>Redo:</strong> {journal.redo_available ? "yes" : "no"}
+        <strong>Edits:</strong> {journal.edit_count}
+      </div>
+
+      {/* Undo / Redo buttons */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+        <button
+          onClick={() => useEditorStore.getState().undo()}
+          disabled={!journal.undo_available}
+          style={{
+            flex: 1,
+            padding: "6px 12px",
+            fontSize: "12px",
+            fontWeight: 500,
+            borderRadius: "4px",
+            border: "1px solid var(--border)",
+            background: journal.undo_available ? "var(--bg-secondary, #f5f5f5)" : "var(--bg-tertiary, #e8e8e8)",
+            color: journal.undo_available ? "var(--text-primary)" : "var(--text-muted)",
+            cursor: journal.undo_available ? "pointer" : "default",
+          }}
+        >
+          ↩ Undo
+        </button>
+        <button
+          onClick={() => useEditorStore.getState().redo()}
+          disabled={!journal.redo_available}
+          style={{
+            flex: 1,
+            padding: "6px 12px",
+            fontSize: "12px",
+            fontWeight: 500,
+            borderRadius: "4px",
+            border: "1px solid var(--border)",
+            background: journal.redo_available ? "var(--bg-secondary, #f5f5f5)" : "var(--bg-tertiary, #e8e8e8)",
+            color: journal.redo_available ? "var(--text-primary)" : "var(--text-muted)",
+            cursor: journal.redo_available ? "pointer" : "default",
+          }}
+        >
+          ↪ Redo
+        </button>
       </div>
 
       <div style={{ fontSize: "11px", fontWeight: "bold", color: "var(--text-secondary)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>

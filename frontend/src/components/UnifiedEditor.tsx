@@ -289,12 +289,13 @@ function PageElementSelector({ currentPage, defaultSection }: { currentPage: num
       .then((r) => r.json())
       .then((data) => setHasToc(data.is_toc || false))
       .catch(() => setHasToc(false));
-    // Get body elements for the content list
+    // Get body elements for the content list (exclude header/footer region elements)
     fetch(`${API_BASE}/document/page/${currentPage}/elements`)
       .then((r) => r.json())
       .then((data) => {
         const elems = (data.elements || []).filter(
           (e: any) => e.type !== "header" && e.type !== "footer"
+            && e.bbox.y0 >= 60 && e.bbox.y1 <= 700
         );
         setBodyElements(elems.map((e: any) => ({
           id: e.id,

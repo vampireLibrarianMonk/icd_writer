@@ -361,7 +361,106 @@ python -m pytest tests/ -v --ignore=tests/integration/alpha_*.py
 
 ---
 
-## Execution Strategy
+## PDF Output Verification (Cross-cutting)
+
+**Question:** Can we verify the output PDF content and format for specifically what was updated?  
+**Answer:** Yes. The test suite opens exported PDFs with PyMuPDF, extracts text per page, and compares against expected values.
+
+**Question:** Are changes singular or cumulative? Can we test both?  
+**Answer:** Both. Tests should cover:
+- **Singular:** One edit → export → verify that single change appears correctly
+- **Cumulative:** Multiple edits in sequence → single export → verify ALL changes present and no interference
+
+### Existing Coverage (`tests/e2e/test_export_pdf.py`, `test_export_download.py`)
+
+Already tests:
+- Exported PDF has correct page count
+- Edited text appears on the correct page
+- Unedited pages have identical text to source
+- Page extension creates new page with overflow content
+- Small edit doesn't change page count
+
+### New Tests Needed: `tests/integration/test_ug_pdf_output.py`
+
+#### Singular Edit Verification
+
+| Test | What It Validates |
+|------|-------------------|
+| `test_single_text_edit_in_export` | Edit one block → export → new text on correct page |
+| `test_single_edit_preserves_other_pages` | Edited page changes, all other pages byte-identical |
+| `test_single_edit_correct_page_position` | Extracted text bbox is near the original block's position |
+| `test_table_cell_edit_in_export` | Edit one table cell → export → cell value updated |
+| `test_toc_edit_in_export` | Edit TOC entry → export → title changed on TOC page |
+
+#### Cumulative Edit Verification
+
+| Test | What It Validates |
+|------|-------------------|
+| `test_two_edits_same_page` | Edit block A + block B on page 5 → both appear in export |
+| `test_edits_on_different_pages` | Edit page 5 + page 7 → both pages updated, others intact |
+| `test_table_edit_plus_text_edit` | Table row delete + paragraph edit → both reflected |
+| `test_three_sequential_edits_no_interference` | Edit 1 doesn't corrupt edit 2's context |
+| `test_cumulative_edits_with_undo_in_middle` | Edit A → Edit B → Undo B → Edit C → export has A+C, not B |
+| `test_edit_then_table_add_row` | Text edit on page 5 + add row on page 7 → both correct |
+
+#### Format and Position Verification
+
+| Test | What It Validates |
+|------|-------------------|
+| `test_edited_text_within_original_bbox` | New text bbox overlaps with original block's bbox (±5pt) |
+| `test_font_size_preserved` | Edited text has same font size as original |
+| `test_table_borders_present_after_rebuild` | Exported PDF has drawing rects in the table zone |
+| `test_table_text_centered_in_cells` | Cell text x-center is within ±10pt of cell center |
+| `test_shifted_content_maintains_spacing` | After row delete, line spacing below table matches original |
+
+#### Methodology
+
+```python
+import fitz
+
+def verify_export(client, page_num, expected_text_fragment):
+    """Export the current document and verify text on a specific page."""
+    res = client.get("/document/export-download?filename=verify.pdf")
+    doc = fitz.open(stream=res.content, filetype="pdf")
+    page_text = doc[page_num - 1].get_text("text")
+    doc.close()
+    assert expected_text_fragment in page_text
+
+def verify_position(client, page_num, text_fragment, expected_y, tolerance=15):
+    """Verify that specific text appears near an expected Y coordinate."""
+    res = client.get("/document/export-download?filename=verify.pdf")
+    doc = fitz.open(stream=res.content, filetype="pdf")
+    page = doc[page_num - 1]
+    blocks = page.get_text("dict")["blocks"]
+    for block in blocks:
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                if text_fragment in span.get("text", ""):
+                    actual_y = span["bbox"][1]
+                    assert abs(actual_y - expected_y) < tolerance, (
+                        f"Text '{text_fragment}' at y={actual_y}, expected ~{expected_y}"
+                    )
+                    return
+    assert False, f"Text '{text_fragment}' not found on page {page_num}"
+
+def verify_unedited_pages_identical(client, source_path, edited_pages):
+    """Verify all non-edited pages match the source exactly."""
+    res = client.get("/document/export-download?filename=verify.pdf")
+    export_doc = fitz.open(stream=res.content, filetype="pdf")
+    source_doc = fitz.open(str(source_path))
+    for i in range(len(source_doc)):
+        if (i + 1) in edited_pages:
+            continue
+        assert export_doc[i].get_text("text") == source_doc[i].get_text("text"), (
+            f"Page {i+1} changed unexpectedly (should be untouched)"
+        )
+    export_doc.close()
+    source_doc.close()
+```
+
+---
 
 ### Phase 1: API-level regression (no browser needed)
 

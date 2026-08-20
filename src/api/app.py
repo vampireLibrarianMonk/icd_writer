@@ -1204,7 +1204,10 @@ def create_app() -> FastAPI:
 
         # Step 2: Compute new table dimensions
         new_table_y1 = table_y0 + row_height * num_rows
-        height_delta = new_table_y1 - original_table_y1
+        # Use the zone boundary (req.y_max) as the reference for what was there before
+        # This is more reliable than border detection which may miss caption rows
+        original_bottom = max(original_table_y1, req.y_max)
+        height_delta = new_table_y1 - original_bottom
 
         # Column positions: equal-width division of the table
         # This is stable across rebuilds (no dependency on detected vertical borders)
@@ -1223,15 +1226,15 @@ def create_app() -> FastAPI:
         # Start redaction just below the caption (which ends ~2pt above table_y0)
         # but above the first data row. This preserves the caption title.
         redact_y_start = table_y0 - 0.5  # Just above the top border line
-        redact_rect = fitz.Rect(table_x0 - 2, redact_y_start, table_x1 + 2, original_table_y1 + 2)
+        redact_rect = fitz.Rect(table_x0 - 2, redact_y_start, table_x1 + 2, original_bottom + 2)
         page.add_redact_annot(redact_rect, fill=(1, 1, 1))
         page.apply_redactions()
 
         # Step 5: If new table is taller/shorter, shift content below
         if height_delta > 0.5:
-            _shift_below(page, raw, original_table_y1, height_delta)
+            _shift_below(page, raw, original_bottom, height_delta)
         elif height_delta < -0.5:
-            _shift_below(page, raw, original_table_y1, height_delta)  # negative shift = move up
+            _shift_below(page, raw, original_bottom, height_delta)  # negative shift = move up
 
         # Step 6: Draw new table borders
         border_w = 0.48
@@ -1368,23 +1371,36 @@ def create_app() -> FastAPI:
             page.apply_redactions()
 
         # ─── Re-draw text at shifted positions ─────────────────────
-        # Insert each span individually at its original X position, shifted Y.
-        # Spans keep their exact X coordinates from the source PDF — this
-        # preserves line breaks and margins without needing font-metric-based wrapping.
+        # Group spans by Y position (same-line spans must stay together)
+        from collections import defaultdict
+        line_groups = defaultdict(list)
         for span in spans_to_shift:
-            font_size = span["size"]
-            new_y0 = span["y0"] + shift_amount
+            # Round Y to group spans on the same line (within 1pt)
+            line_key = round(span["y0"] * 2) / 2  # 0.5pt precision
+            line_groups[line_key].append(span)
+
+        # Insert each line's spans sorted by X position
+        for line_key in sorted(line_groups.keys()):
+            line_spans = sorted(line_groups[line_key], key=lambda s: s["x0"])
+
+            first_span = line_spans[0]
+            font_size = first_span["size"]
+            new_y0 = first_span["y0"] + shift_amount
             baseline_y = new_y0 + font_size * 0.78
 
             if baseline_y > page_height - 50:
                 continue
 
-            bold = bool(span["flags"] & 2**4)
-            italic = bool(span["flags"] & 2**1)
+            bold = bool(first_span["flags"] & 2**4)
+            italic = bool(first_span["flags"] & 2**1)
 
+            # Join all spans on this line into one text string
+            full_text = "".join(s["text"] for s in line_spans)
+
+            # Use insert_text at the correct baseline (always renders)
             _insert_text_with_font(
-                page, fitz.Point(span["x0"], baseline_y),
-                span["text"], span["font"], font_size, bold, italic,
+                page, fitz.Point(first_span["x0"], baseline_y),
+                full_text, first_span["font"], font_size, bold, italic,
             )
 
         # ─── Re-draw vector drawings at shifted positions ──────────

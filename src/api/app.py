@@ -1368,7 +1368,9 @@ def create_app() -> FastAPI:
             page.apply_redactions()
 
         # ─── Re-draw text at shifted positions ─────────────────────
-        # Insert each span at its original X position, shifted Y
+        # Insert each span individually at its original X position, shifted Y.
+        # Spans keep their exact X coordinates from the source PDF — this
+        # preserves line breaks and margins without needing font-metric-based wrapping.
         for span in spans_to_shift:
             font_size = span["size"]
             new_y0 = span["y0"] + shift_amount

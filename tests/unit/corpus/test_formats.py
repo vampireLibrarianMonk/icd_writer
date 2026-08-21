@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-CORPUS_DIR = Path(__file__).parent.parent.parent / "test_corpus"
+CORPUS_DIR = Path(__file__).parent.parent.parent.parent / "test_corpus"
 HSI_DIR = CORPUS_DIR / "hsi_sys_015g"
 TSAFE_DIR = CORPUS_DIR / "tsafe"
 

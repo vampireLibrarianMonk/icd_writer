@@ -6,6 +6,42 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.7.0] — 2026-08-21
+
+### Added
+- **User Guide regression test suite** — 115 automated tests across 11 files, validating
+  every feature described in `USER_GUIDE.md` against real ICD documents:
+  - `test_ug_table_edit.py` (13 tests): table zones, cells, inline edit, add/delete row,
+    content shift, column preservation
+  - `test_ug_paragraph_edit.py` (11 tests): block edit, undo/redo, edit count, page image
+    changes, TBR resolution by editing
+  - `test_ug_revision_compare.py` (16 tests): families endpoint, section diffs, no bogus
+    headings, boilerplate filtering, classification accuracy, value changes, TBD delta
+  - `test_ug_session.py` (10 tests): undo/redo availability, save/load session files,
+    new session state reset
+  - `test_ug_save_export.py` (8 tests): save working copy, export PDF, export-download,
+    unedited page preservation
+  - `test_ug_page_extension.py` (3 tests): large edit overflow, content on next page,
+    undo behavior
+  - `test_ug_toc_edit.py` (9 tests): TOC detection, entries with titles and page refs,
+    edit/undo cycle, image change verification
+  - `test_ug_document_manager.py` (8 tests): list documents, metadata fields, delete
+    cleanup with source PDF preservation
+  - `test_ug_element_types.py` (19 tests): no giant headings, no TOC misclassification,
+    heading/paragraph ratio, elements on every content page
+  - `test_ug_multi_doc.py` (5 tests): cross-document search, TBD dashboard spanning
+    multiple indexed documents
+  - `test_ug_pdf_output.py` (10 tests): singular/cumulative edit verification, position
+    and font size checks, table border presence
+- **Development inspection scripts**: `alpha_editor.py`, `check_elements.py` for manual
+  page-by-page element analysis
+
+### Known Issues Documented
+- Export pipeline does not embed Document IR edits into PDF text layer (xfail, pre-existing)
+- `20130010957.pdf` has a TOC entry misclassified as heading (xfail, classification edge case)
+
+---
+
 ## [1.6.0] — 2026-08-07
 
 ### Added

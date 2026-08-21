@@ -1,7 +1,8 @@
-1.6.0
+1.7.0
 
 # Version History (semantic versioning: major.minor.patch)
 #
+# 1.7.0  2026-08-21  d2fa06f  User Guide regression test suite (115 tests, 11 files, full workflow coverage)
 # 1.6.0  2026-08-07  b986ed3  Document Manager panel, element type pipeline revamp, table shift fix,
 #                              loading indicator, undo/redo in session panel, TOC detection fix
 # 1.5.0  2026-08-07  acd805b  Phase 1 briefing consolidation: Revision Compare panel, section diff,

@@ -1,12 +1,12 @@
 # Remaining Work — ICD Writer
 
-Last updated: 2026-08-07
+Last updated: 2026-08-21
 
 ---
 
 ## 1. Flattened PDF Editing
 
-**Status:** Not started  
+**Status:** Not started
 **Priority:** High — blocks editing of scanned/flattened ICDs
 
 ### Problem
@@ -33,43 +33,10 @@ OCR the page → get text bounding boxes → store as Document IR → on edit, d
 
 ---
 
-## 2. Font Embedding for Rebuilt Pages
+## 2. Table Editing — Remaining Gaps
 
-**Status:** Complete (v1.4.0) — dynamic font extraction with graceful fallback  
-**Priority:** Done
-
-### What Works
-
-- FontCache extracts embedded fonts from source PDFs on document open
-- Text insertion (table rebuild, TOC add, header/footer edit) uses extracted font when available
-- Falls back to system fonts (Liberation/Windows) for non-embedded fonts
-- Falls back to base-14 built-in as last resort
-- Text width calculations use the actual font metrics for accurate centering
-- Handles PDFs with embedded fonts AND PDFs with referenced-only fonts
-
-### Fallback Chain
-
-1. Extracted font from source PDF (exact match — pixel-identical)
-2. System font file (Liberation Serif/Sans/Mono — metrically compatible)
-3. Base-14 built-in (tiro/helv/cour — always available, slightly different metrics)
-
----
-
-## 3. Table Editing — Remaining Gaps
-
-**Status:** Panel-based CRUD works (v1.4.0)  
+**Status:** Panel-based CRUD works (v1.4.0)
 **Priority:** Low
-
-### What Works (v1.4.0)
-
-- Panel-based TableEditor with auto-detection and dropdown selector
-- Add row / delete row via full zone rebuild
-- Cell editing via rebuild (atomic, no positioning bugs)
-- Sequential edits stable (columns derived from horizontal borders)
-- Undo/redo via PDF backup/restore
-- Export verified (no duplicate text)
-- Span merging for multi-span cells (Temperature + degree + C)
-- Caption preservation during rebuild
 
 ### What Doesn't Work
 
@@ -80,44 +47,20 @@ OCR the page → get text bounding boxes → store as Document IR → on edit, d
 
 ---
 
-## 4. Header/Footer Editing
+## 3. Cross-Page TOC Auto-Update
 
-**Status:** Complete (v1.4.0)  
-**Priority:** Done
-
-### What Works
-
-- HeaderFooterEditor panel with left/center/right editable fields
-- PUT /document/page/{n}/header-footer persists edits to working copy
-- Alignment-aware text positioning (left/center/right)
-- Undo via PDF backup/restore
-- Integrated into the dropdown selector panel
-- Page image refreshes after edit
-- Export skips double-patching for edited pages
-
----
-
-## 5. Cross-Page TOC Auto-Update
-
-**Status:** Not started  
+**Status:** Not started
 **Priority:** Low
 
 ### Problem
 
 When page content changes (e.g., page extension adds a page), the TOC page numbers become stale. Currently the user must manually edit TOC entries to update page references.
 
-### What Works (v1.4.0)
-
-- TOC detection (section numbering + leader dots + page refs)
-- Add/Edit/Delete entries via panel
-- Undo for TOC operations
-- Export reflects TOC changes
-
 ---
 
-## 6. Multi-Document Editing Session
+## 4. Multi-Document Editing Session
 
-**Status:** Not started  
+**Status:** Not started
 **Priority:** Low
 
 ### Problem
@@ -126,9 +69,9 @@ Currently only one document can be open at a time. Opening a new document clears
 
 ---
 
-## 7. Requirement Traceability
+## 5. Requirement Traceability
 
-**Status:** Extraction exists, linking does not  
+**Status:** Extraction exists, linking does not
 **Priority:** Future
 
 ### Remaining
@@ -139,17 +82,10 @@ Currently only one document can be open at a time. Opening a new document clears
 
 ---
 
-## 8. Production Hardening
+## 6. Production Hardening
 
-**Status:** Ongoing  
+**Status:** Ongoing
 **Priority:** Medium
-
-### Done (v1.4.0)
-- [x] Persistent session storage (save/load .icd-session files)
-- [x] Session survives backend restart (load from file)
-- [x] Working copy workflow (original PDF never mutated until explicit save)
-- [x] .env / .test-env environment separation
-- [x] No-cache on index.html for reliable frontend deploys
 
 ### Remaining
 - [ ] Authentication / multi-user sessions
@@ -162,139 +98,57 @@ Currently only one document can be open at a time. Opening a new document clears
 
 ---
 
-## 9. ICD Briefing Consolidation
+## 7. ICD Briefing Consolidation — Phase 2-4
 
-**Status:** Phase 1 complete (v1.5.0)  
-**Priority:** High — core value proposition of the tool  
-**Design doc:** `flush_out/ICD_BRIEFING_CONSOLIDATION.md`
+**Status:** Phase 1 complete (v1.5.0), Phase 2+ not started
+**Priority:** Medium
+**Design doc:** `flush_out/archive/ICD_BRIEFING_CONSOLIDATION.md`
 
-### What Works (Phase 1)
-
-- **Revision Compare panel** replaces old Diff tab
-  - Scoped to currently opened document's family
-  - From/To dropdowns with forward-only ordering enforcement
-  - Standard mode: free structural analysis (value changes, TBD deltas, text diffs)
-  - Advanced mode: per-section AI summarize with cost display
-- **Section-by-section comparison** with collapsed accordion view
-  - Specific text diff snippets (word-level changes, not just counts)
-  - Value extraction: detects spec changes (voltages, power, dimensions)
-  - TBD delta tracking: resolved vs introduced per section
-  - Classification: editorial / technical / structural (with AI override)
-- **Boilerplate filtering**: header/footer stamps extracted as "Global Changes",
-  sections with only boilerplate reclassified as unchanged
-- **Cross-reference detection** between documents
-- **Maturity scoring** per section and overall
-- **Document highlight**: clicking page link opens doc, navigates, highlights
-  the section with orange overlay (store-driven, page-gated, no race conditions)
-- **OCR handling**: flattened PDFs prompt for OCR before comparison
-- **Family detection**: groups docs by normalized stem, handles ICD naming
-  conventions (HSI_SYS_001H + 001I grouped correctly)
-
-### Test Coverage
-
-- 75 tests pass (24 unit + 32 version_diff + 19 integration)
-- Integration tests hit real API + AI summarize endpoint
-- Highlight accuracy verified: 99% (112/113 sections match overlays)
-- Alpha-tuned against HSI_SYS_001 H→I and IDSS_IDD RevE→F
-
-### Remaining (Phase 2-4)
+### Remaining Phases
 
 - Phase 2: Multi-revision walkthrough (D→E→F sequential)
 - Phase 3: Semantic conflict detection (Bedrock embeddings + Claude)
 - Phase 4: N-document scaling + interface topology graph
 - PDF briefing export (Jinja2 + WeasyPrint)
 
-### Next Step
+---
 
-Phase 2: extend to 3+ document chains (Tier 2 corpus). Add net-change
-view across full revision span. Consider PDF export of briefing output.
+## 8. Export Pipeline — Edit Embedding
 
+**Status:** Known bug (discovered during v1.7.0 regression testing)
+**Priority:** High
+
+### Problem
+
+`POST /document/export` produces a reconstructed PDF but does **not** embed
+in-memory Document IR edits into the PDF text layer. The exported PDF contains
+the original text, not the edited text. This is validated by:
+- `test_edit_rerender_cycle.py::test_full_cycle_page5` (FAILS)
+- `test_ug_pdf_output.py` (8 tests xfailed)
+
+### Expected Behavior
+
+After editing a block via `PUT /document/block/{id}`, the subsequent export
+should produce a PDF where `page.get_text()` returns the new text.
+
+### Likely Root Cause
+
+The export pipeline reconstructs pages from the source PDF rather than
+applying the page-patch (redact + re-insert) that the image preview uses.
 
 ---
 
-## 10. AI Model Selection for Search
+## Completed Items (Archived)
 
-**Status:** Complete (v1.4.0)  
-**Priority:** Done
+The following have been completed and moved to `flush_out/archive/`:
 
-### What Works
-
-- GET /search/models returns all available models with descriptions and cost
-- Search endpoint accepts `model` parameter to select which index to query
-- Frontend dropdown in the Search panel shows all models with plain descriptions
-- Explanation text tells users what model selection means
-- Default auto-selects the recommended model (titan-v2-sliding)
-- Choice persists for the session
-
-### What Exists
-
-- 4 embedding models configured: Titan V2, Titan V1, Cohere English V3, Cohere Multilingual V3
-- 5 chunking strategies: fixed words, paragraph, section, sliding window, semantic
-- Full evaluation harness (`src/search/eval_harness.py`) with ground truth queries
-- ModelRegistry (`src/search/model_registry.py`) probes Bedrock for available models
-- Benchmark results stored per run, best config auto-selected
-- `_get_best_config()` picks the top performer from last evaluation
-- Documents are indexed with ALL models simultaneously (separate indexes per model)
-
-### How It Works (what the user needs to understand)
-
-When a document is uploaded, its text gets split into chunks and each chunk
-is converted into a mathematical fingerprint (a vector) by an AI model. This
-happens once per model, creating separate search indexes.
-
-When you search, your question is converted into the same kind of fingerprint
-using the same model, then matched against the index built by that model.
-
-Different models interpret language differently:
-- One model might be better at matching technical jargon to plain questions
-- Another might be cheaper but slightly less accurate
-- A third might handle synonyms better
-
-The user is choosing which index to search against. All indexes exist already.
-The choice affects search quality and cost, not speed.
-
-### What's Missing
-
-- User cannot see which model is currently active
-- User cannot switch between models from the UI
-- No explanation shown of what the choice means
-- No cost or quality comparison visible to the user
-
-### Implementation
-
-1. Add a "Search Model" dropdown to the Search panel with a brief explanation:
-   "Choose which AI model interprets your search. Documents are indexed with
-   all models. Different models may find different relevant passages."
-
-2. Show each option with a plain description:
-   ```
-   Titan V2 (Recommended)     — Best balance of quality and cost
-   Cohere English V3           — Slightly better at synonyms, 4x cost
-   Titan V1                    — Cheapest, slightly lower accuracy
-   Cohere Multilingual V3      — Best if searching non-English content
-   ```
-
-3. Show the benchmark score next to each (from last eval run):
-   ```
-   Titan V2          ████████░░ 87% match quality    $0.0001/search
-   Cohere English    █████████░ 91% match quality    $0.0004/search
-   ```
-
-4. Default to "Recommended" (auto-selects best from eval harness)
-
-5. Store preference in browser localStorage so it persists between sessions
-
-6. Pass selected model config to the search API via query parameter
-
-### User-Facing Copy (for the UI tooltip/help)
-
-"Each search model converts your question into a mathematical pattern and
-finds document passages with similar patterns. We index your documents with
-all available models when they are uploaded. Choosing a different model here
-searches a different index of the same documents. The recommended model
-scored highest on our quality tests against real ICD questions."
-
-### Effort
-
-Small (half day). The backend already supports model selection via config.
-Just need a UI dropdown, a brief explanation, and a query parameter.
+- **Font Embedding** — v1.4.0: Dynamic extraction with graceful fallback chain
+- **Header/Footer Editing** — v1.4.0: Panel with left/center/right fields
+- **AI Model Selection** — v1.4.0: Dropdown, per-session preference, benchmark display
+- **Table CRUD Operations** — v1.4.0: Panel-based add/delete row via rebuild
+- **ICD Briefing Phase 1** — v1.5.0: Revision Compare panel, section diff, value extraction
+- **Test Document Corpus** — Assembled: HSI H/I, IDSS E/F, TSAFE, LVC all in repo
+- **Session Management** — v1.4.0: Save/load .icd-session files, persistent state
+- **Editing & Rendering** — v1.4.0: Full edit→preview→export cycle
+- **Page Rebuild Design** — v1.4.0: Clip-and-paste content shift
+- **Table Editing Strategy** — v1.4.0: Panel-based rebuild approach

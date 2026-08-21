@@ -87,15 +87,24 @@ docker compose up -d opensearch
 ## Testing
 
 ```bash
-# Integration tests (fast, no Docker needed for most)
+# Unit tests (fast, no Docker needed)
+python -m pytest tests/unit/ -v
+
+# Integration tests (no Docker needed for most)
 python -m pytest tests/integration/ -v
+
+# User Guide regression suite (validates every documented feature)
+python -m pytest tests/integration/ -k "test_ug" -v
+
+# Full suite inside Docker (includes WeasyPrint export tests)
+docker exec icd-backend python -m pytest tests/integration/ -k "test_ug" -v
 
 # Full suite
 python -m pytest tests/ -v
-
-# Page rebuild pipeline specifically
-python -m pytest tests/integration/test_page_rebuild_pipeline.py -v
 ```
+
+The regression suite (`test_ug_*`) maps 1:1 to sections in [USER_GUIDE.md](USER_GUIDE.md).
+See [tests/USER_GUIDE_REGRESSION_PLAN.md](tests/USER_GUIDE_REGRESSION_PLAN.md) for the full test plan.
 
 ## Project Structure
 

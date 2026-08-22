@@ -1,0 +1,118 @@
+[
+  {
+    "id": "item-thermostat-params",
+    "drive_id": "drive-interface-data",
+    "parent_id": "root",
+    "name": "Thermostat_Parameters.xlsx",
+    "is_folder": false,
+    "size": 8542,
+    "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "author": "UCB Thermal Engineering",
+    "modified_by": "UCB Thermal Engineering",
+    "created_at": "2024-05-30T09:00:00Z",
+    "modified_at": "2024-05-30T09:00:00Z",
+    "versions": [
+      {"id": "1.0", "lastModifiedDateTime": "2024-05-30T09:00:00Z", "size": 8542, "author": "UCB Thermal"}
+    ]
+  },
+  {
+    "id": "item-mass-props",
+    "drive_id": "drive-interface-data",
+    "parent_id": "root",
+    "name": "HSI_Mass_Properties.xlsx",
+    "is_folder": false,
+    "size": 9100,
+    "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "author": "UCB Mechanical Engineering",
+    "modified_by": "UCB Mechanical Engineering",
+    "created_at": "2024-02-14T10:00:00Z",
+    "modified_at": "2025-04-20T14:00:00Z",
+    "versions": [
+      {"id": "1.0", "lastModifiedDateTime": "2024-02-14T10:00:00Z", "size": 7800, "author": "UCB Mechanical"},
+      {"id": "2.0", "lastModifiedDateTime": "2024-08-10T11:00:00Z", "size": 8400, "author": "UCB Mechanical"},
+      {"id": "3.0", "lastModifiedDateTime": "2025-04-20T14:00:00Z", "size": 9100, "author": "UCB Mechanical"}
+    ]
+  },
+  {
+    "id": "item-power-budget",
+    "drive_id": "drive-interface-data",
+    "parent_id": "root",
+    "name": "Power_Budget_v2.xlsx",
+    "is_folder": false,
+    "size": 9800,
+    "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "author": "UCB Electrical Engineering",
+    "modified_by": "UCB Electrical Engineering",
+    "created_at": "2024-01-20T08:00:00Z",
+    "modified_at": "2024-10-05T16:00:00Z",
+    "versions": [
+      {"id": "1.0", "lastModifiedDateTime": "2024-01-20T08:00:00Z", "size": 7200, "author": "UCB Electrical"},
+      {"id": "2.0", "lastModifiedDateTime": "2024-10-05T16:00:00Z", "size": 9800, "author": "UCB Electrical"}
+    ]
+  },
+  {
+    "id": "item-tsafe-results",
+    "drive_id": "drive-interface-data",
+    "parent_id": "root",
+    "name": "TSAFE_Test_Results.xlsx",
+    "is_folder": false,
+    "size": 7600,
+    "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "author": "NASA Ames TSAFE Team",
+    "modified_by": "NASA Ames TSAFE Team",
+    "created_at": "2013-04-15T10:00:00Z",
+    "modified_at": "2013-04-15T10:00:00Z"
+  },
+  {
+    "id": "item-mount-drawing",
+    "drive_id": "drive-drawings",
+    "parent_id": "root",
+    "name": "Spectrometer_Mount_Drawing.png",
+    "is_folder": false,
+    "size": 245000,
+    "mime_type": "image/png",
+    "author": "Design Engineering",
+    "modified_by": "Design Engineering",
+    "created_at": "2024-06-22T09:00:00Z",
+    "modified_at": "2024-06-22T09:00:00Z"
+  },
+  {
+    "id": "item-thermal-table",
+    "drive_id": "drive-drawings",
+    "parent_id": "root",
+    "name": "Thermal_Table_Extract.png",
+    "is_folder": false,
+    "size": 180000,
+    "mime_type": "image/png",
+    "author": "UCB Thermal Engineering",
+    "modified_by": "UCB Thermal Engineering",
+    "created_at": "2024-08-20T11:00:00Z",
+    "modified_at": "2024-08-20T11:00:00Z"
+  },
+  {
+    "id": "item-connector-pinout",
+    "drive_id": "drive-drawings",
+    "parent_id": "root",
+    "name": "Connector_Pinout_J1.tiff",
+    "is_folder": false,
+    "size": 520000,
+    "mime_type": "image/tiff",
+    "author": "Spectrum Astro Design",
+    "modified_by": "Spectrum Astro Design",
+    "created_at": "2024-04-15T08:00:00Z",
+    "modified_at": "2024-04-15T08:00:00Z"
+  },
+  {
+    "id": "item-system-overview",
+    "drive_id": "drive-drawings",
+    "parent_id": "root",
+    "name": "System_Overview_Diagram.png",
+    "is_folder": false,
+    "size": 310000,
+    "mime_type": "image/png",
+    "author": "Systems Engineering",
+    "modified_by": "Systems Engineering",
+    "created_at": "2023-11-20T10:00:00Z",
+    "modified_at": "2023-11-20T10:00:00Z"
+  }
+]

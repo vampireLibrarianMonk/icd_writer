@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>HSI Power Interface Specification</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+            line-height: 1.6;
+            color: #172B4D;
+        }
+        .page-header {
+            border-bottom: 2px solid #0052CC;
+            padding-bottom: 12px;
+            margin-bottom: 24px;
+        }
+        .page-header h1 {
+            margin: 0;
+            color: #172B4D;
+        }
+        .page-meta {
+            font-size: 12px;
+            color: #6B778C;
+            margin-top: 8px;
+        }
+        h2 {
+            color: #172B4D;
+            border-bottom: 1px solid #DFE1E6;
+            padding-bottom: 8px;
+            margin-top: 32px;
+        }
+        p {
+            margin: 12px 0;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+            background: #00875A;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1>HSI Power Interface Specification</h1>
+        <div class="page-meta">
+            <span>Space: HESSI Engineering</span> &middot;
+            <span>Last modified: 2025-05-30</span> &middot;
+            <span>Author: Systems Engineering</span> &middot;
+            <span class="status-badge">CURRENT</span>
+        </div>
+    </div>
+
+    <h2>Power Bus Interface</h2>
+        <p>The Spectrometer receives unregulated 28V power from the spacecraft bus through connector J1. The power interface provides over-current protection via a 5A fuse on the spacecraft side. The Spectrometer internal power conditioning unit (CPC) regulates 28V to the required secondary voltages (5V, ±12V, -190V detector bias).</p>
+
+    <h2>Power Modes</h2>
+        <p>Science Mode: 88.5W average (cryocooler dominant)</p>
+        <p>Eclipse Mode: 17.5W (survival heaters + IDPU standby)</p>
+        <p>Safehold Mode: 7.0W (essential heaters only)</p>
+        <p>The spacecraft must provide continuous power in all modes. Power cycling the Spectrometer requires 48+ hours for cryocooler re-cooldown.</p>
+
+    <h2>Current Requirements</h2>
+        <p>Inrush current at power-on: < 10A for < 100ms</p>
+        <p>Steady-state science mode: 3.2A at 28V</p>
+        <p>Peak transient (shutter actuation): 5A for < 50ms</p>
+        <p>The spacecraft bus must accommodate these transient loads without voltage droop below 24V.</p>
+
+    <h2>Open Items</h2>
+        <p>TBR-UCB-102: Cryocooler residual operating forces (currently 0.5N, awaiting final vibration test)</p>
+        <p>TBR-UCB-110: Shutter actuation duration (currently 0.5s, design may change to 0.3s)</p>
+
+    <hr>
+    <p style="font-size: 11px; color: #6B778C;">
+        This page is maintained as a living specification. Changes are tracked
+        in the page history. For the formal baseline, see the released ICD PDF.
+    </p>
+</body>
+</html>

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "att-mech-req-v2",
+    "page_id": "page-hsi-mech-req",
+    "filename": "HSI_Mech_Requirements_v2.docx",
+    "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "file_size": 15420,
+    "comment": "Post-PDR update — mass and alignment requirements finalized"
+  },
+  {
+    "id": "att-thermal-report",
+    "page_id": "page-hsi-thermal",
+    "filename": "Thermal_Test_Report.docx",
+    "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "file_size": 12800,
+    "comment": "Thermal vacuum test results"
+  },
+  {
+    "id": "att-thermal-cdr",
+    "page_id": "page-hsi-reviews",
+    "filename": "Thermal_Analysis_CDR.pptx",
+    "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "file_size": 45000,
+    "comment": "CDR presentation — thermal analysis"
+  },
+  {
+    "id": "att-elec-review",
+    "page_id": "page-hsi-reviews",
+    "filename": "Electrical_Design_Review.pptx",
+    "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "file_size": 38000,
+    "comment": "EDR presentation slides"
+  },
+  {
+    "id": "att-tsafe-spec",
+    "page_id": "page-tsafe-dataformat",
+    "filename": "TSAFE_Message_Spec.docx",
+    "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "file_size": 11200,
+    "comment": "Data format specification v2"
+  },
+  {
+    "id": "att-tsafe-arch",
+    "page_id": "page-tsafe-home",
+    "filename": "TSAFE_Architecture_Overview.pptx",
+    "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "file_size": 32000,
+    "comment": "System architecture concept briefing"
+  }
+]

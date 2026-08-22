@@ -1,0 +1,26 @@
+[
+  {
+    "id": "space-hsi",
+    "key": "HSI",
+    "name": "HESSI Engineering",
+    "type": "global",
+    "description": "HESSI Spacecraft Interface Control Documents and Engineering Artifacts",
+    "homepage_id": "page-hsi-home"
+  },
+  {
+    "id": "space-idss",
+    "key": "IDSS",
+    "name": "IDSS Docking Program",
+    "type": "global",
+    "description": "International Docking System Standard — Interface Definitions and Reviews",
+    "homepage_id": "page-idss-home"
+  },
+  {
+    "id": "space-tsafe",
+    "key": "TSAFE",
+    "name": "TSAFE Development",
+    "type": "global",
+    "description": "Traffic Safety Advisor — System Design and Test Documentation",
+    "homepage_id": "page-tsafe-home"
+  }
+]

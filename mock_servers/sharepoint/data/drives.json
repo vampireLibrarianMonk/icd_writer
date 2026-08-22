@@ -1,0 +1,32 @@
+[
+  {
+    "id": "drive-interface-data",
+    "site_id": "site-engineering",
+    "name": "Interface Data",
+    "description": "Parameter budgets, test matrices, and interface data tables",
+    "owner": "Systems Engineering",
+    "created_at": "2023-06-01T00:00:00Z",
+    "modified_at": "2025-08-10T00:00:00Z",
+    "used_bytes": 2457600
+  },
+  {
+    "id": "drive-drawings",
+    "site_id": "site-engineering",
+    "name": "Drawings",
+    "description": "Interface drawings, block diagrams, and schematics",
+    "owner": "Design Engineering",
+    "created_at": "2023-06-01T00:00:00Z",
+    "modified_at": "2025-02-18T00:00:00Z",
+    "used_bytes": 8945664
+  },
+  {
+    "id": "drive-photos",
+    "site_id": "site-engineering",
+    "name": "Photos",
+    "description": "Hardware photos, test facility images, and assembly verification",
+    "owner": "Integration & Test",
+    "created_at": "2024-01-01T00:00:00Z",
+    "modified_at": "2025-05-15T00:00:00Z",
+    "used_bytes": 15728640
+  }
+]

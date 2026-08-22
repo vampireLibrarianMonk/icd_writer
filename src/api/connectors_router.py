@@ -67,9 +67,102 @@ def _auto_configure():
             token=sharepoint_token,
             extra={"site_id": site_id},
         )
-
-
 _auto_configure()
+
+
+# ─── URL Translation (Docker networking) ──────────────────────────────
+
+# When running in Docker, the user enters "localhost:8090" but the backend
+# container needs to use the Docker DNS name "mock-confluence:8090".
+# This map translates known localhost URLs to their Docker equivalents.
+
+_DOCKER_URL_MAP = {
+    "http://localhost:8090": "http://mock-confluence:8090",
+    "http://localhost:8091": "http://mock-sharepoint:8091",
+    "http://127.0.0.1:8090": "http://mock-confluence:8090",
+    "http://127.0.0.1:8091": "http://mock-sharepoint:8091",
+}
+
+
+def _resolve_url(url: str) -> str:
+    """Translate user-provided URL to the correct address for this environment.
+
+    In Docker: localhost → container name (via Docker DNS).
+    Outside Docker: no change (localhost works directly).
+    """
+    url = url.rstrip("/")
+
+    # Check if we're running in Docker (backend container has this env var)
+    in_docker = os.environ.get("OPENSEARCH_HOST") == "opensearch"
+
+    if in_docker:
+        return _DOCKER_URL_MAP.get(url, url)
+    return url
+
+
+# ─── AWS Secrets Manager Integration ──────────────────────────────────
+
+
+def _load_secret(secret_name: str) -> dict | None:
+    """Load a secret from AWS Secrets Manager. Returns None if unavailable."""
+    try:
+        import boto3
+        import json as _json
+
+        region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        client = boto3.client("secretsmanager", region_name=region)
+        response = client.get_secret_value(SecretId=secret_name)
+        return _json.loads(response["SecretString"])
+    except Exception:
+        return None
+
+
+def _save_secret(secret_name: str, secret_data: dict) -> bool:
+    """Save or update a secret in AWS Secrets Manager. Returns True on success."""
+    try:
+        import boto3
+        import json as _json
+
+        region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        client = boto3.client("secretsmanager", region_name=region)
+        secret_string = _json.dumps(secret_data)
+
+        try:
+            client.update_secret(SecretId=secret_name, SecretString=secret_string)
+        except client.exceptions.ResourceNotFoundException:
+            client.create_secret(Name=secret_name, SecretString=secret_string)
+
+        return True
+    except Exception:
+        return False
+
+
+def _load_saved_credentials():
+    """Try to load connector credentials from Secrets Manager on startup."""
+    secret = _load_secret("icd-writer/connectors")
+    if not secret:
+        return
+
+    if "confluence_url" in secret and "confluence_token" in secret:
+        url = _resolve_url(secret["confluence_url"])
+        _configs["confluence"] = ConnectorConfig(
+            connector_type=ConnectorType.CONFLUENCE,
+            base_url=url,
+            token=secret["confluence_token"],
+        )
+
+    if "sharepoint_url" in secret and "sharepoint_token" in secret:
+        url = _resolve_url(secret["sharepoint_url"])
+        _configs["sharepoint"] = ConnectorConfig(
+            connector_type=ConnectorType.SHAREPOINT,
+            base_url=url,
+            token=secret["sharepoint_token"],
+            extra={"site_id": secret.get("sharepoint_site_id", "site-engineering")},
+        )
+
+
+# Try loading from Secrets Manager (non-blocking, falls back gracefully)
+_load_saved_credentials()
 
 
 # ─── Request/Response Models ──────────────────────────────────────────
@@ -79,6 +172,7 @@ class ConfigureRequest(BaseModel):
     url: str
     token: str
     site_id: str = ""  # SharePoint only
+    save_credentials: bool = True  # Save to AWS Secrets Manager
 
 
 # ─── List Connectors ──────────────────────────────────────────────────
@@ -101,15 +195,33 @@ def list_connectors():
     return {"connectors": connectors}
 
 
+@router.get("/saved")
+def list_saved_credentials():
+    """Check what credentials are saved in AWS Secrets Manager (no secrets exposed)."""
+    secret = _load_secret("icd-writer/connectors")
+    if not secret:
+        return {"saved": False, "services": []}
+
+    services = []
+    if "confluence_url" in secret:
+        services.append({"type": "confluence", "url": secret["confluence_url"]})
+    if "sharepoint_url" in secret:
+        services.append({"type": "sharepoint", "url": secret["sharepoint_url"]})
+
+    return {"saved": True, "services": services}
+
+
 # ─── Configure ────────────────────────────────────────────────────────
 
 
 @router.post("/confluence/configure")
 def configure_confluence(req: ConfigureRequest):
     """Configure or update Confluence connector credentials."""
+    resolved_url = _resolve_url(req.url)
+
     config = ConnectorConfig(
         connector_type=ConnectorType.CONFLUENCE,
-        base_url=req.url.rstrip("/"),
+        base_url=resolved_url,
         token=req.token,
     )
     _configs["confluence"] = config
@@ -121,15 +233,22 @@ def configure_confluence(req: ConfigureRequest):
     if success:
         _clients["confluence"] = client
 
-    return {"status": "configured", "connected": success}
+    # Save credentials to Secrets Manager
+    saved = False
+    if req.save_credentials and success:
+        saved = _save_secret("icd-writer/connectors", _build_credentials_payload())
+
+    return {"status": "configured", "connected": success, "credentials_saved": saved}
 
 
 @router.post("/sharepoint/configure")
 def configure_sharepoint(req: ConfigureRequest):
     """Configure or update SharePoint connector credentials."""
+    resolved_url = _resolve_url(req.url)
+
     config = ConnectorConfig(
         connector_type=ConnectorType.SHAREPOINT,
-        base_url=req.url.rstrip("/"),
+        base_url=resolved_url,
         token=req.token,
         extra={"site_id": req.site_id or "site-engineering"},
     )
@@ -141,7 +260,27 @@ def configure_sharepoint(req: ConfigureRequest):
     if success:
         _clients["sharepoint"] = client
 
-    return {"status": "configured", "connected": success}
+    # Save credentials to Secrets Manager
+    saved = False
+    if req.save_credentials and success:
+        saved = _save_secret("icd-writer/connectors", _build_credentials_payload())
+
+    return {"status": "configured", "connected": success, "credentials_saved": saved}
+
+
+def _build_credentials_payload() -> dict:
+    """Build the combined credentials dict for Secrets Manager."""
+    payload = {}
+    if "confluence" in _configs:
+        c = _configs["confluence"]
+        payload["confluence_url"] = c.base_url
+        payload["confluence_token"] = c.token
+    if "sharepoint" in _configs:
+        c = _configs["sharepoint"]
+        payload["sharepoint_url"] = c.base_url
+        payload["sharepoint_token"] = c.token
+        payload["sharepoint_site_id"] = c.extra.get("site_id", "site-engineering")
+    return payload
 
 
 # ─── Test Connection ──────────────────────────────────────────────────

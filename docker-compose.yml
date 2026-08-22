@@ -50,6 +50,11 @@ services:
       - OPENSEARCH_HOST=opensearch
       - OPENSEARCH_PORT=9200
       - OPENSEARCH_SCHEME=http
+      - CONFLUENCE_URL=http://mock-confluence:8090
+      - CONFLUENCE_TOKEN=auto-configured
+      - SHAREPOINT_URL=http://mock-sharepoint:8091
+      - SHAREPOINT_TOKEN=auto-configured
+      - SHAREPOINT_SITE_ID=site-engineering
     volumes:
       - ./output:/app/output
       - ./icds:/app/icds
@@ -57,6 +62,10 @@ services:
       - ~/.aws:/root/.aws:ro
     depends_on:
       opensearch:
+        condition: service_healthy
+      mock-confluence:
+        condition: service_healthy
+      mock-sharepoint:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]

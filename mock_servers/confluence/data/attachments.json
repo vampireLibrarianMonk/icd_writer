@@ -8,12 +8,36 @@
     "comment": "Post-PDR update — mass and alignment requirements finalized"
   },
   {
+    "id": "att-power-budget",
+    "page_id": "page-hsi-power",
+    "filename": "Power_Budget_v2.xlsx",
+    "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "file_size": 9800,
+    "comment": "Electrical power budget — post-CDR values"
+  },
+  {
+    "id": "att-power-wiki",
+    "page_id": "page-hsi-power",
+    "filename": "HSI_Power_ICD_Wiki.html",
+    "media_type": "text/html",
+    "file_size": 4200,
+    "comment": "Power interface living specification (HTML export)"
+  },
+  {
     "id": "att-thermal-report",
     "page_id": "page-hsi-thermal",
     "filename": "Thermal_Test_Report.docx",
     "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "file_size": 12800,
     "comment": "Thermal vacuum test results"
+  },
+  {
+    "id": "att-thermostat-params",
+    "page_id": "page-hsi-thermal",
+    "filename": "Thermostat_Parameters.xlsx",
+    "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "file_size": 8542,
+    "comment": "Source data for Table 3.2.1-1"
   },
   {
     "id": "att-thermal-cdr",
@@ -32,6 +56,30 @@
     "comment": "EDR presentation slides"
   },
   {
+    "id": "att-home-overview",
+    "page_id": "page-hsi-home",
+    "filename": "HESSI_Mission_Overview.pptx",
+    "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "file_size": 42000,
+    "comment": "Mission overview presentation"
+  },
+  {
+    "id": "att-home-mass",
+    "page_id": "page-hsi-home",
+    "filename": "HSI_Mass_Properties.xlsx",
+    "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "file_size": 9100,
+    "comment": "Spectrometer mass budget v3"
+  },
+  {
+    "id": "att-home-integration",
+    "page_id": "page-hsi-home",
+    "filename": "Integration_Procedure_v1.docx",
+    "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "file_size": 14200,
+    "comment": "Spectrometer integration procedure"
+  },
+  {
     "id": "att-tsafe-spec",
     "page_id": "page-tsafe-dataformat",
     "filename": "TSAFE_Message_Spec.docx",
@@ -40,11 +88,35 @@
     "comment": "Data format specification v2"
   },
   {
+    "id": "att-tsafe-results",
+    "page_id": "page-tsafe-dataformat",
+    "filename": "TSAFE_Test_Results.xlsx",
+    "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "file_size": 7600,
+    "comment": "Performance test matrix"
+  },
+  {
     "id": "att-tsafe-arch",
     "page_id": "page-tsafe-home",
     "filename": "TSAFE_Architecture_Overview.pptx",
     "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "file_size": 32000,
     "comment": "System architecture concept briefing"
+  },
+  {
+    "id": "att-idss-changelog",
+    "page_id": "page-idss-changelog",
+    "filename": "IDSS_Change_Log_Wiki.html",
+    "media_type": "text/html",
+    "file_size": 3500,
+    "comment": "Revision change tracking page export"
+  },
+  {
+    "id": "att-idss-seal",
+    "page_id": "page-idss-home",
+    "filename": "Seal_Design_Review_v3_FRR.pptx",
+    "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "file_size": 48000,
+    "comment": "Seal interface design — Flight Readiness Review"
   }
 ]

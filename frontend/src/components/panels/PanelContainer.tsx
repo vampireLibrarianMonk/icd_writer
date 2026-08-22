@@ -20,26 +20,40 @@ export function PanelContainer({ width }: PanelContainerProps) {
   const visibility = usePanelStore((s) => s.visibility);
   const setSubTab = usePanelStore((s) => s.setSubTab);
 
+  // Safety: ensure visibility object has all expected keys
+  const v: PanelVisibility = {
+    search: visibility?.search ?? true,
+    tbd: visibility?.tbd ?? true,
+    local: visibility?.local ?? true,
+    confluence: visibility?.confluence ?? false,
+    sharepoint: visibility?.sharepoint ?? false,
+    lineage: visibility?.lineage ?? true,
+    compare: visibility?.compare ?? true,
+    timeline: visibility?.timeline ?? true,
+    costs: visibility?.costs ?? false,
+    credentials: visibility?.credentials ?? true,
+  };
+
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Sub-tab bar (only for groups with multiple panels) */}
       {activeGroup === "discover" && (
         <SubTabBar
-          tabs={getDiscoverTabs(visibility)}
+          tabs={getDiscoverTabs(v)}
           activeTab={subTabs.discover}
           onTabChange={(id) => setSubTab("discover", id as any)}
         />
       )}
       {activeGroup === "sources" && (
         <SubTabBar
-          tabs={getSourcesTabs(visibility)}
+          tabs={getSourcesTabs(v)}
           activeTab={subTabs.sources}
           onTabChange={(id) => setSubTab("sources", id as any)}
         />
       )}
       {activeGroup === "session" && (
         <SubTabBar
-          tabs={getSessionTabs(visibility)}
+          tabs={getSessionTabs(v)}
           activeTab={subTabs.session}
           onTabChange={(id) => setSubTab("session", id as any)}
         />

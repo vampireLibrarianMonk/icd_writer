@@ -13,9 +13,9 @@ export function CredentialsPanel() {
     setLoading(true);
     try {
       const data = await credentialsApi.list();
-      setCredentials(data.credentials);
+      setCredentials(data.credentials || []);
     } catch {
-      // ignore
+      setCredentials([]);
     } finally {
       setLoading(false);
     }

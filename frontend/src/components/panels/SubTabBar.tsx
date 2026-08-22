@@ -5,7 +5,7 @@ interface SubTabBarProps {
 }
 
 export function SubTabBar({ tabs, activeTab, onTabChange }: SubTabBarProps) {
-  if (tabs.length <= 1) return null;
+  if (!tabs || tabs.length <= 1) return null;
 
   return (
     <div style={{

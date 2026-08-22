@@ -6,10 +6,31 @@ import { HelpModal } from "./components/HelpModal";
 import { ActivityRail } from "./components/panels/ActivityRail";
 import { PanelContainer } from "./components/panels/PanelContainer";
 import { PanelManager } from "./components/panels/PanelManager";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, Component, type ReactNode } from "react";
 import { useEditorStore } from "./store/editorStore";
 import { usePanelStore } from "./store/panelStore";
 import type { IngestStatus } from "./api/client";
+
+// Error boundary to prevent white screen crashes
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 32, color: "#f44336", fontFamily: "monospace", fontSize: 13 }}>
+          <h2>Something went wrong</h2>
+          <pre style={{ whiteSpace: "pre-wrap" }}>{this.state.error.message}</pre>
+          <button onClick={() => { localStorage.removeItem("icd-writer-panel-state"); location.reload(); }}
+            style={{ marginTop: 12, padding: "8px 16px", cursor: "pointer" }}>
+            Reset &amp; Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   const [panelWidth, setPanelWidth] = useState(420);
@@ -106,6 +127,7 @@ function App() {
   }, [ingestStatus?.done]);
 
   return (
+    <ErrorBoundary>
     <div
       style={{ display: "flex", flexDirection: "column", height: "100vh" }}
       onMouseMove={handleMouseMove}
@@ -154,6 +176,7 @@ function App() {
       {/* Panel Manager popover */}
       {panelManagerOpen && <PanelManager />}
     </div>
+    </ErrorBoundary>
   );
 }
 

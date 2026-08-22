@@ -115,7 +115,7 @@ export function SessionPanel() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-        {journal.entries.map((entry, idx) => (
+        {(journal.entries || []).map((entry, idx) => (
           <div
             key={entry.id}
             style={{

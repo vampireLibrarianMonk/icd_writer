@@ -6,6 +6,8 @@ import { TBDDashboard } from "../TBDDashboardPanel";
 import { DocumentManagerPanel } from "../DocumentManagerPanel";
 import { RevisionComparePanel } from "../RevisionComparePanel";
 import { SessionPanel } from "../SessionPanel";
+import { ConfluencePanel } from "./ConfluencePanel";
+import { SharePointPanel } from "./SharePointPanel";
 
 interface PanelContainerProps {
   width: number;
@@ -50,8 +52,8 @@ export function PanelContainer({ width }: PanelContainerProps) {
         {activeGroup === "discover" && subTabs.discover === "tbd" && <TBDDashboard />}
 
         {activeGroup === "sources" && subTabs.sources === "local" && <DocumentManagerPanel />}
-        {activeGroup === "sources" && subTabs.sources === "confluence" && <PlaceholderPanel name="Confluence" />}
-        {activeGroup === "sources" && subTabs.sources === "sharepoint" && <PlaceholderPanel name="SharePoint" />}
+        {activeGroup === "sources" && subTabs.sources === "confluence" && <ConfluencePanel />}
+        {activeGroup === "sources" && subTabs.sources === "sharepoint" && <SharePointPanel />}
         {activeGroup === "sources" && subTabs.sources === "lineage" && <PlaceholderPanel name="Lineage" />}
 
         {activeGroup === "compare" && <RevisionComparePanel />}

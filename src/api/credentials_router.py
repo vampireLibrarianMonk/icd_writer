@@ -297,3 +297,49 @@ def _load_from_secrets_manager():
 
 # Load on module init
 _load_from_secrets_manager()
+
+
+def _seed_from_env():
+    """Seed credential store from connector env vars if not already populated."""
+    from datetime import datetime, timezone
+
+    global _next_id
+
+    # Don't seed if we already have credentials (from Secrets Manager)
+    if _credentials:
+        return
+
+    confluence_url = os.environ.get("CONFLUENCE_URL", "")
+    confluence_token = os.environ.get("CONFLUENCE_TOKEN", "")
+    if confluence_url and confluence_token:
+        cred_id = _generate_id()
+        _credentials[cred_id] = {
+            "service": "confluence",
+            "name": "Confluence (auto-configured)",
+            "url": confluence_url,
+            "token": confluence_token,
+            "site_id": "",
+            "notes": "Auto-configured from CONFLUENCE_URL environment variable",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_tested": None,
+            "last_test_result": None,
+        }
+
+    sharepoint_url = os.environ.get("SHAREPOINT_URL", "")
+    sharepoint_token = os.environ.get("SHAREPOINT_TOKEN", "")
+    if sharepoint_url and sharepoint_token:
+        cred_id = _generate_id()
+        _credentials[cred_id] = {
+            "service": "sharepoint",
+            "name": "SharePoint (auto-configured)",
+            "url": sharepoint_url,
+            "token": sharepoint_token,
+            "site_id": os.environ.get("SHAREPOINT_SITE_ID", "site-engineering"),
+            "notes": "Auto-configured from SHAREPOINT_URL environment variable",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_tested": None,
+            "last_test_result": None,
+        }
+
+
+_seed_from_env()

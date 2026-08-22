@@ -80,6 +80,7 @@ export function PanelManager() {
         <PanelGroup title="SESSION">
           <PanelToggle label="Session Timeline" panel="timeline" checked={visibility.timeline} onToggle={toggleVisibility} />
           <PanelToggle label="Cost Tracking" panel="costs" checked={visibility.costs} onToggle={toggleVisibility} />
+          <PanelToggle label="Credentials" panel="credentials" checked={visibility.credentials} onToggle={toggleVisibility} />
         </PanelGroup>
       </div>
     </div>

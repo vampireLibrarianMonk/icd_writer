@@ -8,6 +8,7 @@ import { RevisionComparePanel } from "../RevisionComparePanel";
 import { SessionPanel } from "../SessionPanel";
 import { ConfluencePanel } from "./ConfluencePanel";
 import { SharePointPanel } from "./SharePointPanel";
+import { CredentialsPanel } from "./CredentialsPanel";
 
 interface PanelContainerProps {
   width: number;
@@ -60,6 +61,7 @@ export function PanelContainer({ width }: PanelContainerProps) {
 
         {activeGroup === "session" && subTabs.session === "timeline" && <SessionPanel />}
         {activeGroup === "session" && subTabs.session === "costs" && <PlaceholderPanel name="Cost Tracking" />}
+        {activeGroup === "session" && subTabs.session === "credentials" && <CredentialsPanel />}
       </div>
     </div>
   );
@@ -87,6 +89,7 @@ function getSessionTabs(v: PanelVisibility) {
   const tabs: { id: string; label: string }[] = [];
   if (v.timeline) tabs.push({ id: "timeline", label: "Timeline" });
   if (v.costs) tabs.push({ id: "costs", label: "Costs" });
+  if (v.credentials) tabs.push({ id: "credentials", label: "Credentials" });
   return tabs;
 }
 

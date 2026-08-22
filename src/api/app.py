@@ -3868,6 +3868,10 @@ def create_app() -> FastAPI:
     from src.api.connectors_router import router as connectors_router
     app.include_router(connectors_router)
 
+    # ─── Credentials Router ────────────────────────────────────────────
+    from src.api.credentials_router import router as credentials_router
+    app.include_router(credentials_router)
+
     return app
 
 

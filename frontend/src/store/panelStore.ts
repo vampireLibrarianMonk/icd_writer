@@ -6,7 +6,7 @@ export type PanelGroup = "editor" | "discover" | "sources" | "compare" | "sessio
 
 export type DiscoverTab = "search" | "tbd";
 export type SourcesTab = "local" | "confluence" | "sharepoint" | "lineage";
-export type SessionTab = "timeline" | "costs";
+export type SessionTab = "timeline" | "costs" | "credentials";
 
 export interface SubTabs {
   discover: DiscoverTab;
@@ -24,6 +24,7 @@ export interface PanelVisibility {
   compare: boolean;
   timeline: boolean;
   costs: boolean;
+  credentials: boolean;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────
@@ -79,6 +80,7 @@ const defaultVisibility: PanelVisibility = {
   compare: true,
   timeline: true,
   costs: false,
+  credentials: true,
 };
 
 const defaultSubTabs: SubTabs = {

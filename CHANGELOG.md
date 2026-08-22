@@ -6,6 +6,71 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.8.0] — 2026-08-22
+
+### Added
+- **Panel Architecture** — replaced flat 6-tab bar with activity rail + grouped sub-tabs:
+  - Activity Rail: 5 group icons (Editor, Discover, Sources, Compare, Session) + settings gear
+  - Sub-tab groups: Discover (Search + TBDs), Sources (Local + Confluence + SharePoint + Lineage),
+    Session (Timeline + Costs + Credentials)
+  - Panel Manager: visibility toggles per panel, persisted to localStorage
+  - Error Boundary: catches React crashes, shows "Reset & Reload" instead of blank screen
+- **Confluence Connector** — browse and import from Confluence Cloud/Server:
+  - `src/connectors/confluence.py`: REST API v2 client (spaces, pages, attachments, PDF export)
+  - Frontend panel: setup card → space browser → page browser → file list
+  - Auth: Bearer token or PAT
+- **SharePoint Connector** — browse and import from Microsoft Graph API:
+  - `src/connectors/sharepoint.py`: Graph API client (drives, items, download, versions, delta)
+  - Frontend panel: setup card → drive browser → item list
+  - Auth: Bearer token (OAuth2)
+- **Credentials Manager** — CRUD panel for connector credentials:
+  - Backend: `src/api/credentials_router.py` with full REST API
+  - Frontend: list/add/edit/delete credentials with masked token display
+  - Test button: verify connectivity per credential
+  - AWS Secrets Manager persistence (auto-saves on change, loads on restart)
+  - Auto-seeds from environment variables on first startup
+- **Mock Confluence Server** (`mock_servers/confluence/`):
+  - FastAPI app replicating Confluence Cloud REST API v2/v1
+  - 3 spaces, 9 pages, 15 attachments from test corpus
+  - Dockerized sidecar on port 8090
+- **Mock SharePoint Server** (`mock_servers/sharepoint/`):
+  - FastAPI app replicating Microsoft Graph API v1.0
+  - 3 drives, 12 items with version history, downloadable files
+  - Delta query support for change tracking
+  - Dockerized sidecar on port 8091
+- **Backend Connector Router** (`src/api/connectors_router.py`):
+  - Configure, test, browse spaces/pages/files, download, version history
+  - Docker URL translation (localhost → container names)
+  - Auto-configure from environment variables
+- **Multi-format Test Corpus** (`test_corpus/`):
+  - Generation script creating DOCX, PPTX, XLSX, HTML, PNG, TIFF from ICD content
+  - Versioned document series (3-5 versions per document)
+  - 144 format validation tests in `tests/unit/corpus/`
+  - 13 live connector integration tests
+- **Corpus versioned series** for lineage testing:
+  - HSI Mech Requirements: DOCX v1→v4 (draft→flight)
+  - HSI Power Budget: XLSX v1→v5 (allocation→on-orbit)
+  - IDSS Seal Design Review: PPTX v1→v3 (PDR→FRR)
+  - HSI Thermal Limits: XLSX v1→v3 (analysis→on-orbit)
+
+### Changed
+- Docker Compose: added `mock-confluence` and `mock-sharepoint` sidecar services
+- Backend depends on mock sidecars (waits for healthy)
+- Backend environment includes `CONFLUENCE_URL/TOKEN` and `SHAREPOINT_URL/TOKEN`
+- `flush_out/REMAINING_WORK.md`: pruned completed items, added export bug + engine migration
+- Panel store: Zustand with localStorage persistence for all panel/visibility state
+
+### Fixed
+- `SessionPanel`: crash when no active session (404 response parsed as valid journal)
+- `SessionPanel`: `journal.document.split()` on null when no document loaded
+- `SessionPanel`: `journal.entries.map()` on undefined
+- Connector panels: `getFileIcon()` crash on undefined filename
+- Panel visibility: null-safe defaults with `??` for all fields
+- SubTabBar: null guard on `tabs` prop before `.length` check
+- Docker networking: backend translates `localhost:8090` → `mock-confluence:8090`
+
+---
+
 ## [1.7.0] — 2026-08-21
 
 ### Added

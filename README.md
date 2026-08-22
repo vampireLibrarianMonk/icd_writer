@@ -18,6 +18,8 @@ Wait ~30 seconds for services to become healthy, then open http://localhost:3000
 | Backend API | http://localhost:8000 | REST endpoints |
 | OpenSearch | http://localhost:9200 | Search engine |
 | OpenSearch Dashboards | http://localhost:5601 | Index inspection |
+| Mock Confluence | http://localhost:8090 | Confluence API stub (dev) |
+| Mock SharePoint | http://localhost:8091 | Graph API stub (dev) |
 
 AWS credentials must be configured (`~/.aws/credentials`) for embedding and RAG features.
 
@@ -40,6 +42,9 @@ See [USER_GUIDE.md](USER_GUIDE.md) for a full walkthrough with examples.
 - **TBD Dashboard** — Cross-document TBD/TBR tracking with status management and conflict detection
 - **Upload & Index** — Upload PDF → extract → embed → index with real-time progress
 - **Faithful Export** — Unedited pages are byte-identical to source; only edited text is re-rendered
+- **Enterprise Connectors** — Browse and import from Confluence and SharePoint (OAuth/token auth)
+- **Credentials Manager** — Store, test, and manage connector credentials with AWS Secrets Manager persistence
+- **Panel Architecture** — Activity rail with grouped sub-tabs, Panel Manager for show/hide control
 
 ## Architecture
 
@@ -113,17 +118,23 @@ docker/                  Dockerfiles (backend, frontend, cli)
 frontend/                React app (TypeScript + Zustand)
 src/
   api/                   FastAPI endpoints + session management
+  connectors/            Confluence + SharePoint client libraries
   models/                Pydantic models (Document IR, ICD IR)
   rendering/             Page patching + rebuild engine
   search/                OpenSearch indexing, retrieval, RAG, TBD dashboard
   reflow.py              Text reflow + page extension
   pipeline.py            Document processing pipeline
+mock_servers/
+  confluence/            Mock Confluence REST API (FastAPI sidecar)
+  sharepoint/            Mock SharePoint Graph API (FastAPI sidecar)
 tests/
   unit/                  Model, reflow, search tests
-  integration/           Edit → preview → export cycle tests
+  unit/corpus/           Corpus format + versioned series tests
+  integration/           Edit → preview → export cycle + connector tests
   e2e/                   Full API tests
+test_corpus/             Multi-format document corpus (generated)
 icds/                    Test ICD corpus (Git LFS)
-docs/                    Phase requirements, design documents
+flush_out/               Active design documents + archive
 ```
 
 ## Documentation

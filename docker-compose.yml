@@ -78,5 +78,33 @@ services:
       backend:
         condition: service_healthy
 
+  # ─── Mock Connector Sidecars ───────────────────────────────────────
+
+  mock-confluence:
+    build: ./mock_servers/confluence
+    container_name: icd-mock-confluence
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./mock_servers/confluence/data:/app/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  mock-sharepoint:
+    build: ./mock_servers/sharepoint
+    container_name: icd-mock-sharepoint
+    ports:
+      - "8091:8091"
+    volumes:
+      - ./mock_servers/sharepoint/data:/app/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8091/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
 volumes:
   opensearch-data:

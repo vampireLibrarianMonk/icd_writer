@@ -22,11 +22,13 @@ export function SharePointPanel() {
   // Check if already configured on mount
   useEffect(() => {
     connectorsApi.listConnectors().then((data) => {
-      const sp = data.connectors.find((c) => c.type === "sharepoint");
+      const sp = data.connectors?.find((c) => c.type === "sharepoint");
       if (sp?.configured) {
         setConnected(true);
         setView("drives");
-        loadDrives();
+        connectorsApi.listSpaces("sharepoint").then((driveData) => {
+          setDrives(driveData.spaces || []);
+        }).catch(() => {});
       }
     }).catch(() => {});
   }, []);
@@ -225,6 +227,7 @@ function Empty({ message }: { message: string }) {
 }
 
 function getFileIcon(filename: string): string {
+  if (!filename) return "📎";
   const ext = filename.split(".").pop()?.toLowerCase();
   switch (ext) {
     case "pdf": return "📕";
@@ -237,6 +240,7 @@ function getFileIcon(filename: string): string {
 }
 
 function formatDate(iso: string): string {
+  if (!iso) return "";
   try {
     return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   } catch {

@@ -23,11 +23,13 @@ export function ConfluencePanel() {
   // Check if already configured on mount
   useEffect(() => {
     connectorsApi.listConnectors().then((data) => {
-      const conf = data.connectors.find((c) => c.type === "confluence");
+      const conf = data.connectors?.find((c) => c.type === "confluence");
       if (conf?.configured) {
         setConnected(true);
         setView("spaces");
-        loadSpaces();
+        connectorsApi.listSpaces("confluence").then((spaceData) => {
+          setSpaces(spaceData.spaces || []);
+        }).catch(() => {});
       }
     }).catch(() => {});
   }, []);
@@ -253,6 +255,7 @@ function Empty({ message }: { message: string }) {
 }
 
 function getFileIcon(filename: string): string {
+  if (!filename) return "📎";
   const ext = filename.split(".").pop()?.toLowerCase();
   switch (ext) {
     case "pdf": return "📕";

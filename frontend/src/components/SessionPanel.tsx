@@ -68,7 +68,7 @@ export function SessionPanel() {
       </p>
       <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "12px" }}>
         <strong>Session:</strong> {journal.session_id}<br />
-        <strong>Document:</strong> {journal.document.split("/").pop() || "none"}<br />
+        <strong>Document:</strong> {(journal.document || "").split("/").pop() || "none"}<br />
         <strong>Edits:</strong> {journal.edit_count}
       </div>
 

@@ -30,8 +30,11 @@ export function SessionPanel() {
   useEffect(() => {
     setLoading(true);
     fetch(`${API_BASE}/session/journal`)
-      .then((r) => r.json())
-      .then(setJournal)
+      .then((r) => {
+        if (!r.ok) return null;
+        return r.json();
+      })
+      .then((data) => setJournal(data))
       .catch(() => setJournal(null))
       .finally(() => setLoading(false));
   }, [refreshTrigger, editCount]);
